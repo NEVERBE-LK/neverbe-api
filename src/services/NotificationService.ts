@@ -11,7 +11,6 @@ const OTP_EXPIRY_MINUTES = 5;
 const NOTIFICATION_TRACKER = "notifications_sent";
 const OTP_TTL_DAYS = 1;
 const COOLDOWN_SECONDS = 60;
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
 const MAIL_COLLECTION = "mail";
 
 /** Generate a 6-digit OTP */

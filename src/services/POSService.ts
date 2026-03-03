@@ -1,9 +1,8 @@
 import { adminFirestore } from "@/firebase/firebaseAdmin";
+import admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { Product } from "@/model/Product";
-import { POSOrder } from "@/model/POSTypes";
 import { Order } from "@/model/Order";
-import { addOrder } from "./OrderService";
 import { AppError } from "@/utils/apiResponse";
 import { searchProducts } from "./AlgoliaService";
 import { nanoid } from "nanoid";
@@ -424,14 +423,107 @@ export const getAvailableStocks = async (): Promise<
 // ================================
 
 // ✅ Create a new POS Order and Update Stock
-export const createPOSOrder = async (
-  orderData: Partial<Order>,
-  userId: string,
-) => {
+export const createPOSOrder = async (order: Partial<Order>, userId: string) => {
+  if (!order.orderId) throw new AppError("Order ID is required", 400);
+  if (!order.items?.length) throw new AppError("Order items are required", 400);
+  if (!order.stockId) throw new AppError("Stock ID is required", 400);
+
+  const orderRef = adminFirestore.collection("orders").doc(order.orderId);
+  const now = admin.firestore.Timestamp.now();
+
+  const orderData: Order = {
+    ...order,
+    from: "Store", // Ensure from is Store
+    userId: userId || order.userId || null,
+    createdAt: now,
+    updatedAt: now,
+  } as Order;
+
   try {
-    await addOrder(orderData);
-    await clearPosCart(orderData.stockId!, userId);
-    // Return the order data with createdAt for PDF generation
+    const productRefs = order.items.map((i) =>
+      adminFirestore.collection("products").doc(i.itemId),
+    );
+    const productSnaps = await adminFirestore.getAll(...productRefs);
+    const productMap = new Map(
+      productSnaps.map((snap) => [snap.id, snap.data() as Product]),
+    );
+
+    // Set bPrice on items from server-side product data
+    order.items = order.items.map((item) => {
+      const prod = productMap.get(item.itemId);
+      return {
+        ...item,
+        bPrice: prod?.buyingPrice || 0,
+      };
+    });
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const batch = adminFirestore.batch();
+
+        await Promise.all(
+          order.items.map(async (item) => {
+            const invSnap = await adminFirestore
+              .collection("stock_inventory")
+              .where("productId", "==", item.itemId)
+              .where("variantId", "==", item.variantId)
+              .where("size", "==", item.size)
+              .where("stockId", "==", order.stockId)
+              .limit(1)
+              .get();
+
+            if (invSnap.empty)
+              throw new AppError(`Missing inventory for ${item.name}`, 404);
+
+            const invDoc = invSnap.docs[0];
+            const invData = invDoc.data() as InventoryItem;
+            const prodData = productMap.get(item.itemId);
+            if (!prodData)
+              throw new AppError(`Product not found: ${item.itemId}`, 404);
+
+            const newInvQty = Math.max(
+              (invData.quantity ?? 0) - item.quantity,
+              0,
+            );
+            const newTotalStock = Math.max(
+              (prodData.totalStock ?? 0) - item.quantity,
+              0,
+            );
+
+            batch.update(invDoc.ref, { quantity: newInvQty });
+            batch.update(
+              adminFirestore.collection("products").doc(item.itemId),
+              {
+                totalStock: newTotalStock,
+                inStock: newTotalStock > 0,
+                updatedAt: now,
+              },
+            );
+          }),
+        );
+
+        batch.set(orderRef, orderData);
+        await batch.commit();
+
+        console.log(
+          `🏬 Store order ${order.orderId} committed (attempt ${attempt})`,
+        );
+        break;
+      } catch (err: any) {
+        if (attempt === 3) throw err;
+        console.warn(`⚠️ Store order retry #${attempt}: ${err.message}`);
+        await new Promise((r) => setTimeout(r, attempt * 200));
+      }
+    }
+
+    await clearPosCart(order.stockId, userId);
+
+    // Integrity Update
+    const { updateOrAddOrderHash } = await import("./IntegrityService");
+    const orderForHashSnap = await orderRef.get();
+    const orderForHash = orderForHashSnap.data();
+    if (orderForHash) await updateOrAddOrderHash(orderForHash);
+
     return {
       ...orderData,
       createdAt: new Date().toISOString(),
