@@ -9,6 +9,8 @@ runConfig:
 env:
   - variable: NEXT_PUBLIC_BASE_URL
     value: "https://www.neverbe.lk"
+  - variable: NEXT_PUBLIC_API_URL
+    value: "https://api.neverbe.lk"
   - variable: NEXT_PUBLIC_ALGOLIA_APP_ID
     value: "T4W2OD5EXU"
   - variable: NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY

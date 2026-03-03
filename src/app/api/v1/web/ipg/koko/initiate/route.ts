@@ -21,8 +21,9 @@ export const POST = async (req: NextRequest) => {
     const apiKey = process.env.KOKO_API_KEY;
     const privateKey = process.env.KOKO_PRIVATE_KEY;
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-    if (!merchantId || !apiKey || !privateKey || !baseUrl) {
+    if (!merchantId || !apiKey || !privateKey || !baseUrl || !apiUrl) {
       throw new Error("Koko credentials or base URL missing in environment.");
     }
     console.log(
@@ -32,7 +33,7 @@ export const POST = async (req: NextRequest) => {
     // --- Step 4: Construct callback URLs ---
     const returnUrl = `${baseUrl}/checkout/success/${orderId}`;
     const cancelUrl = `${baseUrl}/checkout`;
-    const responseUrl = `${baseUrl}/api/v1/web/ipg/koko/notify`;
+    const responseUrl = `${apiUrl}/api/v1/web/ipg/koko/notify`;
     console.log("[Koko Initiate API] Callback URLs:", {
       returnUrl,
       cancelUrl,

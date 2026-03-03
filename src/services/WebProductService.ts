@@ -4,24 +4,84 @@ import { Product } from "@/interfaces/Product";
 import { adminFirestore } from "@/firebase/firebaseAdmin";
 import { getActivePromotions } from "./WebPromotionService";
 import { ProductVariant } from "@/interfaces/ProductVariant";
+import { searchProducts } from "./AlgoliaService";
 
 /**
  * ProductService - Thin wrapper over ProductRepository
  * Delegates data access to repository layer, keeps business logic here
  */
 
+const buildAlgoliaFiltersForWeb = (options: {
+  tags?: string[];
+  inStock?: boolean;
+  sizes?: string[];
+  gender?: string;
+}): string => {
+  const filters: string[] = ["isDeleted:false", "status:true", "listing:true"];
+
+  if (options.inStock !== undefined) {
+    if (options.inStock) {
+      filters.push("inStock:true");
+    } else {
+      filters.push("inStock:false");
+    }
+  }
+
+  if (options.gender) {
+    filters.push(`gender:"${options.gender}"`);
+  }
+
+  if (options.tags && options.tags.length > 0) {
+    const tagFilters = options.tags.map((t) => `tags:"${t}"`).join(" OR ");
+    filters.push(`(${tagFilters})`);
+  }
+
+  if (options.sizes && options.sizes.length > 0) {
+    const sizeFilters = options.sizes
+      .map((s) => `availableSizes:"${s}"`)
+      .join(" OR ");
+    filters.push(`(${sizeFilters})`);
+  }
+
+  return filters.join(" AND ");
+};
+
+const mapAlgoliaHitsToProducts = (
+  hits: Record<string, unknown>[],
+): Product[] => {
+  return hits.map((hit: Record<string, unknown>) => {
+    const activeVariants = ((hit.variants as ProductVariant[]) || []).filter(
+      (v: ProductVariant & { isDeleted?: boolean }) => !v.isDeleted,
+    );
+
+    return {
+      ...hit,
+      id: hit.objectID || hit.id,
+      productId: hit.objectID || hit.id,
+      variants: activeVariants,
+    } as unknown as Product;
+  });
+};
+
 // ====================== Products ======================
 export const getProducts = async (
   tags?: string[],
   inStock?: boolean,
   page: number = 1,
-  size: number = 20
-): Promise<{ total: number; dataList: Product[] }> =>
-  productRepository.findAll({ tags, inStock, page, size });
+  size: number = 20,
+): Promise<{ total: number; dataList: Product[] }> => {
+  const filtersStr = buildAlgoliaFiltersForWeb({ tags, inStock });
+  const { hits, nbHits } = await searchProducts("", {
+    page: page - 1,
+    hitsPerPage: size,
+    filters: filtersStr,
+  });
+
+  return { total: nbHits, dataList: mapAlgoliaHitsToProducts(hits) };
+};
 
 /**
  * Get products with filtering for gender and sizes
- * Delegates to repository layer which handles in-memory filtering
  */
 export interface ProductFilterOptions {
   tags?: string[];
@@ -33,14 +93,25 @@ export interface ProductFilterOptions {
 }
 
 export const getProductsFiltered = async (
-  options: ProductFilterOptions
-): Promise<{ total: number; dataList: Product[] }> =>
-  productRepository.findAllFiltered(options);
+  options: ProductFilterOptions,
+): Promise<{ total: number; dataList: Product[] }> => {
+  const filtersStr = buildAlgoliaFiltersForWeb(options);
+  const page = options.page || 1;
+  const size = options.size || 20;
+
+  const { hits, nbHits } = await searchProducts("", {
+    page: page - 1,
+    hitsPerPage: size,
+    filters: filtersStr,
+  });
+
+  return { total: nbHits, dataList: mapAlgoliaHitsToProducts(hits) };
+};
 
 // ====================== New Arrivals ======================
 export const getNewArrivals = async (
   page: number = 1,
-  size: number = 20
+  size: number = 20,
 ): Promise<{ total: number; dataList: Product[] }> =>
   productRepository.findNewArrivals({ page, size });
 
@@ -62,7 +133,7 @@ export const getSimilarItems = async (itemId: string) =>
 export const getProductStock = async (
   productId: string,
   variantId: string,
-  size: string
+  size: string,
 ) => {
   const settings = await otherRepository.getSettings();
   if (!settings?.stockId)
@@ -71,7 +142,7 @@ export const getProductStock = async (
     productId,
     variantId,
     size,
-    settings.stockId
+    settings.stockId,
   );
 };
 
@@ -79,7 +150,7 @@ export const getProductStock = async (
 export const getBatchProductStock = async (
   productId: string,
   variantId: string,
-  sizes: string[]
+  sizes: string[],
 ): Promise<Record<string, number>> => {
   const settings = await otherRepository.getSettings();
   if (!settings?.stockId)
@@ -93,9 +164,9 @@ export const getBatchProductStock = async (
         productId,
         variantId,
         size,
-        settings.stockId
+        settings.stockId,
       ),
-    }))
+    })),
   );
 
   const stockMap: Record<string, number> = {};
@@ -121,7 +192,7 @@ export const getBrandForSitemap = async () =>
 
 export const getCategoriesForSitemap = async () =>
   otherRepository.getCategoriesForSitemap(
-    process.env.NEXT_PUBLIC_BASE_URL || ""
+    process.env.NEXT_PUBLIC_BASE_URL || "",
   );
 
 // ====================== Payment Methods ======================
@@ -158,7 +229,7 @@ export const getHotProducts = async () => {
 
   // Filter out unlisted, inactive, or deleted products to prevent "leaking"
   return products.filter(
-    (p) => p.listing === true && p.status === true && !p.isDeleted
+    (p) => p.listing === true && p.status === true && !p.isDeleted,
   );
 };
 
@@ -176,7 +247,7 @@ const getPromotedProductIds = (activePromotions: any[]): Set<string> => {
     }
     if (promo.applicableProductVariants) {
       promo.applicableProductVariants.forEach((v: any) =>
-        promoProductIds.add(v.productId)
+        promoProductIds.add(v.productId),
       );
     }
     if (promo.conditions && Array.isArray(promo.conditions)) {
@@ -216,13 +287,13 @@ export const getDealsProducts = async (
   tags?: string[],
   inStock?: boolean,
   gender?: string,
-  sizes?: string[]
+  sizes?: string[],
 ): Promise<{ total: number; dataList: Product[] }> => {
   const activePromotions = await getActivePromotions();
 
   // 1. Check for Global Promotions
   if (hasGlobalPromotion(activePromotions)) {
-    return productRepository.findAllFiltered({
+    return getProductsFiltered({
       tags,
       inStock,
       page,
@@ -247,7 +318,7 @@ export const getDealsProducts = async (
       const tagsLower = tags.map((t) => t.toLowerCase());
       promoProducts = promoProducts.filter((product) => {
         const productTags = (product.tags || []).map((t: string) =>
-          t.toLowerCase()
+          t.toLowerCase(),
         );
         return tagsLower.some((tag) => productTags.includes(tag));
       });
@@ -256,7 +327,7 @@ export const getDealsProducts = async (
     // InStock
     if (typeof inStock === "boolean") {
       promoProducts = promoProducts.filter(
-        (product) => product.inStock === inStock
+        (product) => product.inStock === inStock,
       );
     }
 
@@ -264,8 +335,8 @@ export const getDealsProducts = async (
     if (gender) {
       promoProducts = promoProducts.filter((product) =>
         (product.gender || []).some(
-          (g: string) => g.toLowerCase() === gender.toLowerCase()
-        )
+          (g: string) => g.toLowerCase() === gender.toLowerCase(),
+        ),
       );
     }
 
@@ -284,8 +355,24 @@ export const getDealsProducts = async (
   const promoCount = promoProducts.length;
 
   // 3. Get Discounted Products Count
-  // We use findDiscounted for accurate count of "filling" items
-  const discountResult = await productRepository.findDiscounted({
+  // We use Algolia for accurate count of "filling" items
+  const getDiscountedProductsFromAlgolia = async (
+    options: ProductFilterOptions,
+  ): Promise<{ total: number; dataList: Product[] }> => {
+    const filtersStr = buildAlgoliaFiltersForWeb(options) + " AND discount > 0";
+    const p = options.page || 1;
+    const s = options.size || 20;
+
+    const { hits, nbHits } = await searchProducts("", {
+      page: p - 1,
+      hitsPerPage: s,
+      filters: filtersStr,
+    });
+
+    return { total: nbHits, dataList: mapAlgoliaHitsToProducts(hits) };
+  };
+
+  const discountResult = await getDiscountedProductsFromAlgolia({
     tags,
     inStock,
     gender,
@@ -325,7 +412,7 @@ export const getDealsProducts = async (
     const pageB = Math.floor((discountOffset + remainingSlots) / size) + 1;
 
     const promises = [
-      productRepository.findDiscounted({
+      getDiscountedProductsFromAlgolia({
         tags,
         inStock,
         gender,
@@ -337,14 +424,14 @@ export const getDealsProducts = async (
 
     if (pageB !== pageA) {
       promises.push(
-        productRepository.findDiscounted({
+        getDiscountedProductsFromAlgolia({
           tags,
           inStock,
           gender,
           sizes,
           page: pageB,
           size: size,
-        })
+        }),
       );
     }
 
@@ -362,7 +449,7 @@ export const getDealsProducts = async (
 
     const neededDiscounts = potentialDiscounts.slice(
       relativeStart,
-      relativeStart + remainingSlots
+      relativeStart + remainingSlots,
     );
 
     // Dedup against Promos (Ensure we don't show a promo item again as a discount item)
@@ -378,7 +465,7 @@ export const getDealsProducts = async (
  * Optimized: Delegates fully to getDealsProducts
  */
 export const getDealsProductsFiltered = async (
-  options: ProductFilterOptions
+  options: ProductFilterOptions,
 ): Promise<{ total: number; dataList: Product[] }> => {
   const { tags, inStock, sizes, gender, page = 1, size = 20 } = options;
   return getDealsProducts(page, size, tags, inStock, gender, sizes);
