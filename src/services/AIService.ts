@@ -1,11 +1,15 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-if (!GEMINI_API_KEY) {
-  throw new Error("GEMINI_API_KEY environment variable is not set.");
-}
-
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+let genAIInstance: GoogleGenerativeAI | null = null;
+const getGenAI = () => {
+  if (!genAIInstance) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key)
+      throw new Error("GEMINI_API_KEY environment variable is not set.");
+    genAIInstance = new GoogleGenerativeAI(key);
+  }
+  return genAIInstance;
+};
 
 /**
  * Global AI method to generate tags/keywords from any text.
@@ -17,10 +21,12 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 export const generateTags = async (
   contextDescription: string,
   content: string,
-  maxTags: number = 15
+  maxTags: number = 15,
 ): Promise<string[]> => {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+    const model = getGenAI().getGenerativeModel({
+      model: "gemini-2.0-flash-lite",
+    });
 
     const prompt = `
       ${contextDescription}

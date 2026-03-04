@@ -1,9 +1,14 @@
 import { algoliasearch } from "algoliasearch";
 
-const APP_ID = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || "";
-const SEARCH_KEY = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY || "";
-
-const client = algoliasearch(APP_ID, SEARCH_KEY);
+let clientInstance: any = null;
+const getClient = () => {
+  if (!clientInstance) {
+    const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || "";
+    const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY || "";
+    clientInstance = algoliasearch(appId, searchKey);
+  }
+  return clientInstance;
+};
 
 export const searchProducts = async (
   query: string = "",
@@ -15,7 +20,7 @@ export const searchProducts = async (
 ) => {
   const { page = 0, hitsPerPage = 20, filters = "" } = params;
 
-  const result = await client.searchSingleIndex({
+  const result = await getClient().searchSingleIndex({
     indexName: "products_index",
     searchParams: {
       query,
@@ -43,7 +48,7 @@ export const searchOrders = async (
 ) => {
   const { page = 0, hitsPerPage = 20, filters = "" } = params;
 
-  const result = await client.searchSingleIndex({
+  const result = await getClient().searchSingleIndex({
     indexName: "orders_index",
     searchParams: {
       query,
@@ -71,7 +76,7 @@ export const searchStockInventory = async (
 ) => {
   const { page = 0, hitsPerPage = 20, filters = "" } = params;
 
-  const result = await client.searchSingleIndex({
+  const result = await getClient().searchSingleIndex({
     indexName: "stock_inventory_index",
     searchParams: {
       query,
@@ -99,7 +104,7 @@ export const searchAdjustments = async (
 ) => {
   const { page = 0, hitsPerPage = 20, filters = "" } = params;
 
-  const result = await client.searchSingleIndex({
+  const result = await getClient().searchSingleIndex({
     indexName: "adjustments_index",
     searchParams: {
       query,
@@ -127,7 +132,7 @@ export const searchPromotions = async (
 ) => {
   const { page = 0, hitsPerPage = 20, filters = "" } = params;
 
-  const result = await client.searchSingleIndex({
+  const result = await getClient().searchSingleIndex({
     indexName: "promotions_index",
     searchParams: {
       query,
@@ -155,7 +160,7 @@ export const searchCoupons = async (
 ) => {
   const { page = 0, hitsPerPage = 20, filters = "" } = params;
 
-  const result = await client.searchSingleIndex({
+  const result = await getClient().searchSingleIndex({
     indexName: "coupons_index",
     searchParams: {
       query,

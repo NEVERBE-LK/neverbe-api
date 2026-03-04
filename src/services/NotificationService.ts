@@ -5,7 +5,6 @@ import crypto from "crypto";
 import { getOrderByIdForInvoice } from "./WebOrderService";
 import { verifyCaptchaToken } from "./CapchaService";
 
-const TEXT_API_KEY = process.env.TEXT_API_KEY;
 const OTP_COLLECTION = "otp_verifications";
 const OTP_EXPIRY_MINUTES = 5;
 const NOTIFICATION_TRACKER = "notifications_sent";
@@ -55,6 +54,7 @@ export const sendCODVerificationOTP = async (
   try {
     console.log(`[OTP Service] sendCODVerificationOTP called for ${phone}`);
 
+    const TEXT_API_KEY = process.env.TEXT_API_KEY;
     if (!TEXT_API_KEY) throw new Error("Missing TEXT_API_KEY");
     if (!phone || !captchaToken)
       throw new Error("Missing phone number or CAPTCHA token");
@@ -201,6 +201,7 @@ export const sendOrderConfirmedSMS = async (orderId: string) => {
       `[Notification Service] sendOrderConfirmedSMS called for order: ${orderId}`,
     );
 
+    const TEXT_API_KEY = process.env.TEXT_API_KEY;
     if (!TEXT_API_KEY) {
       console.warn(`[Notification Service] Missing TEXT_API_KEY`);
       return false;

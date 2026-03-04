@@ -4,23 +4,19 @@ import { FieldValue } from "firebase-admin/firestore";
 import stringify from "json-stable-stringify";
 
 const HASH_LEDGER_COLLECTION = "hash_ledger";
-const HASH_SECRET = process.env.HASH_SECRET;
 
 export const generateDocumentHash = (docData: any) => {
   const dataToHash = { ...docData };
   const canonicalString = stringify(dataToHash);
-  const hashingString = `${canonicalString}${HASH_SECRET}`
-  const hash = crypto
-    .createHash("sha256")
-    .update(hashingString)
-    .digest("hex");
+  const hashingString = `${canonicalString}${process.env.HASH_SECRET}`;
+  const hash = crypto.createHash("sha256").update(hashingString).digest("hex");
 
   return hash;
 };
 
 export const validateDocumentIntegrity = async (
   collectionName: string,
-  docId: string
+  docId: string,
 ) => {
   try {
     const docRef = adminFirestore.collection(collectionName).doc(docId);
@@ -60,7 +56,7 @@ export const validateDocumentIntegrity = async (
   } catch (error) {
     console.error(
       `Error during validation for ${collectionName}/${docId}:`,
-      error
+      error,
     );
     throw error;
   }
@@ -81,7 +77,7 @@ export const updateOrAddOrderHash = async (data: any) => {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       },
-      { merge: true }
+      { merge: true },
     );
 
     console.log(`Hash ledger updated/created for: ${ledgerId}`);
