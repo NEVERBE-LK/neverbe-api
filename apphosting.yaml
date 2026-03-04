@@ -5,7 +5,7 @@ runConfig:
   cpu: 4
   memoryMiB: 8192
 
-# Server-side Environment Variables
+# Server-side Environment Variables and Secrets
 env:
   - variable: WEB_BASE_URL
     value: "https://www.neverbe.lk"
@@ -24,8 +24,7 @@ env:
   - variable: FIREBASE_STORAGE_BUCKET
     value: "neverbe-18307.appspot.com"
 
-# Secrets — pulled from Google Cloud Secret Manager at RUNTIME only
-secrets:
+  # Secrets — pulled from Google Cloud Secret Manager at RUNTIME only
   - variable: FIREBASE_ADMIN_PRIVATE_KEY
     secret: FIREBASE_ADMIN_PRIVATE_KEY
     availability: ["RUNTIME"]
