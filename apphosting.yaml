@@ -40,8 +40,6 @@ env:
   - variable: NEXT_PUBLIC_PAYHERE_URL
     value: "https://payhere.lk/pay/checkout"
 
-# Sensitive Secrets (Must be created in Cloud Secret Manager)
-# See: https://firebase.google.com/docs/app-hosting/configure#secret-parameters
 secrets:
   - variable: FIREBASE_ADMIN_PRIVATE_KEY
     secret: FIREBASE_ADMIN_PRIVATE_KEY
