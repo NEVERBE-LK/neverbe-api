@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import md5 from "crypto-js/md5";
+import { IPGService } from "@/services/IPGService";
 import { updatePayment } from "@/services/WebOrderService";
 
 export const POST = async (req: Request) => {
@@ -31,35 +31,24 @@ export const POST = async (req: Request) => {
       method,
     });
 
-    // --- Step 2: Generate local MD5 signature ---
-    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET!;
-    if (!merchantSecret) {
-      throw new Error("PayHere merchant secret missing in environment");
-    }
-    const hashedSecret = md5(merchantSecret).toString().toUpperCase();
+    // --- Step 2 & 3: Verify signature using IPGService ---
+    const isVerified = IPGService.verifyPayHereNotification(
+      merchant_id,
+      order_id,
+      payhere_amount,
+      payhere_currency,
+      status_code,
+      md5sig,
+    );
 
-    const local_md5sig = md5(
-      merchant_id +
-        order_id +
-        payhere_amount +
-        payhere_currency +
-        status_code +
-        hashedSecret
-    )
-      .toString()
-      .toUpperCase();
-
-    console.log("[PayHere Notify API] Local MD5 signature:", local_md5sig);
-
-    // --- Step 3: Verify signature ---
-    if (local_md5sig !== md5sig) {
-      console.error("[PayHere Notify API] MD5 signature mismatch", {
-        local_md5sig,
-        md5sig,
-      });
+    if (!isVerified) {
+      console.error(
+        "[PayHere Notify API] MD5 signature mismatch for order:",
+        order_id,
+      );
       return NextResponse.json(
         { message: "Unauthorized: Signature mismatch" },
-        { status: 401 }
+        { status: 401 },
       );
     }
     console.log("[PayHere Notify API] Signature verified successfully");
@@ -70,14 +59,14 @@ export const POST = async (req: Request) => {
       await updatePayment(order_id, payment_id, "Paid");
       return NextResponse.json(
         { message: "Payment Successful" },
-        { status: 200 }
+        { status: 200 },
       );
     } else {
       console.warn(
         "❌ Payment failed for order:",
         order_id,
         "Status code:",
-        status_code
+        status_code,
       );
       await updatePayment(order_id, payment_id, "Failed");
       return NextResponse.json({ message: "Payment Failed" }, { status: 400 });
@@ -86,11 +75,11 @@ export const POST = async (req: Request) => {
     console.error(
       "[PayHere Notify API] Error processing notification:",
       err.message,
-      err.stack
+      err.stack,
     );
     return NextResponse.json(
       { message: "Error processing payment", error: err.message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 };

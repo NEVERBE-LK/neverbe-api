@@ -1,6 +1,6 @@
 // app/api/v1/koko/notify/route.ts
 import { NextResponse } from "next/server";
-import crypto from "crypto";
+import { IPGService } from "@/services/IPGService";
 import { updatePayment } from "@/services/WebOrderService";
 
 export const POST = async (req: Request) => {
@@ -15,41 +15,36 @@ export const POST = async (req: Request) => {
     const signature = formData.get("signature") as string;
     const desc = formData.get("desc") as string | null;
 
-    console.log("[Koko Notify API] Form data received:", { orderId, trnId, status, desc });
+    console.log("[Koko Notify API] Form data received:", {
+      orderId,
+      trnId,
+      status,
+      desc,
+    });
 
     if (!orderId || !trnId || !status || !signature) {
       console.warn("[Koko Notify API] Missing required fields");
       return NextResponse.json(
         { message: "Missing required fields" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // --- Step 1: Load public key ---
-    let kokoPublicKey = process.env.KOKO_PUBLIC_KEY;
-    if (!kokoPublicKey) {
-      throw new Error("Koko public key not found in environment.");
-    }
-    kokoPublicKey = kokoPublicKey.replace(/\\n/g, "\n").trim();
-    console.log("[Koko Notify API] Public key loaded");
+    // --- Step 1: Verify signature via IPGService ---
+    const isVerified = IPGService.verifyKokoNotification(
+      orderId,
+      trnId,
+      status,
+      signature,
+    );
 
-    // --- Step 2: Build data string for signature verification ---
-    const dataToVerify = orderId + trnId + status;
-    console.log("[Koko Notify API] Data string to verify:", dataToVerify);
-
-    // --- Step 3: Verify signature ---
-    const verifier = crypto.createVerify("RSA-SHA256");
-    verifier.update(dataToVerify, "utf8");
-    verifier.end();
-
-    const isVerified = verifier.verify(kokoPublicKey, signature, "base64");
     console.log("[Koko Notify API] Signature verification result:", isVerified);
 
     if (!isVerified) {
       console.error("[Koko Notify API] Invalid signature for order:", orderId);
       return NextResponse.json(
         { message: "Unauthorized: Invalid signature" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -63,12 +58,19 @@ export const POST = async (req: Request) => {
     }
 
     console.log("[Koko Notify API] Notification processed successfully");
-    return NextResponse.json({ message: "Notification processed" }, { status: 200 });
+    return NextResponse.json(
+      { message: "Notification processed" },
+      { status: 200 },
+    );
   } catch (error: any) {
-    console.error("[Koko Notify API] Error processing notification:", error.message, error.stack);
+    console.error(
+      "[Koko Notify API] Error processing notification:",
+      error.message,
+      error.stack,
+    );
     return NextResponse.json(
       { message: "Error processing Koko notification", error: error.message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 };
