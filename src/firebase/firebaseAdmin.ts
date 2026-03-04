@@ -4,10 +4,10 @@ if (!admin.apps.length) {
   if (process.env.FIREBASE_ADMIN_PRIVATE_KEY) {
     admin.initializeApp({
       credential: credential.cert({
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+        projectId: process.env.FIREBASE_PROJECT_ID,
         privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(
           /\\n/g,
-          "\n"
+          "\n",
         ),
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       }),
@@ -21,4 +21,4 @@ export const adminFirestore = admin.firestore();
 export const adminAuth = admin.auth();
 export const adminStorageBucket = admin
   .storage()
-  .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
+  .bucket(process.env.FIREBASE_STORAGE_BUCKET);

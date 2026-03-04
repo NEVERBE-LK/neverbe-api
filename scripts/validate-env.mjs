@@ -11,19 +11,14 @@ if (existsSync(".env")) {
   console.log("[validate-env] No .env file found — using injected environment (production)");
 }
 
-// Public env vars that must be available at BUILD time (set in apphosting.yaml env: block)
+// Public env vars available at BUILD time (set in apphosting.yaml env: block)
 const requiredBuildVars = [
-  "NEXT_PUBLIC_BASE_URL",
-  "NEXT_PUBLIC_API_URL",
-  "NEXT_PUBLIC_ALGOLIA_APP_ID",
-  "NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY",
-  "NEXT_PUBLIC_FIREBASE_API_KEY",
-  "NEXT_PUBLIC_FIREBASE_APP_ID",
-  "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
-  "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID",
-  "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
-  "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
-  "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
+  "BASE_URL",
+  "API_URL",
+  "ALGOLIA_APP_ID",
+  "ALGOLIA_SEARCH_API_KEY",
+  "FIREBASE_PROJECT_ID",
+  "FIREBASE_STORAGE_BUCKET",
 ];
 
 // Secrets that are only available at RUNTIME (injected by Cloud Run, not at build time)

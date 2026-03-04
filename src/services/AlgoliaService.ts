@@ -3,8 +3,8 @@ import { algoliasearch } from "algoliasearch";
 let clientInstance: any = null;
 const getClient = () => {
   if (!clientInstance) {
-    const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || "";
-    const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY || "";
+    const appId = process.env.ALGOLIA_APP_ID || "";
+    const searchKey = process.env.ALGOLIA_SEARCH_API_KEY || "";
     clientInstance = algoliasearch(appId, searchKey);
   }
   return clientInstance;

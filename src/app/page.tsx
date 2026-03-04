@@ -43,8 +43,7 @@ function formatMemory(bytes: number) {
 export default async function Home() {
   const envStatus =
     process.env.NODE_ENV === "production" ? "Production" : "Development";
-  const projectId =
-    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "Unknown Project";
+  const projectId = process.env.FIREBASE_PROJECT_ID || "Unknown Project";
 
   // Perform health checks concurrently
   const [dbStatus, authStatus] = await Promise.all([
