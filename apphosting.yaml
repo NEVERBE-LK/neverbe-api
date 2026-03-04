@@ -74,3 +74,6 @@ secrets:
   - variable: PAYHERE_MERCHANT_ID
     secret: PAYHERE_MERCHANT_ID
     availability: ["BUILD", "RUNTIME"]
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+    availability: ["BUILD", "RUNTIME"]
