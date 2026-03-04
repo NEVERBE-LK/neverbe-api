@@ -24,9 +24,6 @@ const requiredBuildVars = [
   "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
   "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
   "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
-  "NEXT_PUBLIC_KOKO_REDIRECT_URL",
-  "NEXT_PUBLIC_WHATSAPP_NUMBER",
-  "NEXT_PUBLIC_PAYHERE_URL",
 ];
 
 // Secrets that are only available at RUNTIME (injected by Cloud Run, not at build time)

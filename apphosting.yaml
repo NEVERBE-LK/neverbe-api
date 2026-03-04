@@ -5,7 +5,7 @@ runConfig:
   cpu: 4
   memoryMiB: 8192
 
-# Public Environment Variables (non-sensitive, fixed values)
+# Public Environment Variables — only what is actually referenced in src/
 env:
   - variable: NEXT_PUBLIC_BASE_URL
     value: "https://www.neverbe.lk"
@@ -29,15 +29,8 @@ env:
     value: "neverbe-18307"
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: "neverbe-18307.appspot.com"
-  - variable: NEXT_PUBLIC_KOKO_REDIRECT_URL
-    value: "https://qaapi.paykoko.com/api/merchants/orderCreate"
-  - variable: NEXT_PUBLIC_WHATSAPP_NUMBER
-    value: "94705208999"
-  - variable: NEXT_PUBLIC_PAYHERE_URL
-    value: "https://payhere.lk/pay/checkout"
 
 # Secrets — pulled from Google Cloud Secret Manager at RUNTIME only
-# BUILD availability is not used because the build phase does not require these secrets
 secrets:
   - variable: FIREBASE_ADMIN_PRIVATE_KEY
     secret: FIREBASE_ADMIN_PRIVATE_KEY
