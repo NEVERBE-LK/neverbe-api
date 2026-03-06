@@ -13,7 +13,7 @@ export class PromotionRepository extends BaseRepository<Promotion> {
    * Serialize promotion for client
    */
   private serializePromotion(
-    doc: FirebaseFirestore.DocumentSnapshot
+    doc: FirebaseFirestore.DocumentSnapshot,
   ): Promotion {
     const data = doc.data()!;
     return {
@@ -35,8 +35,10 @@ export class PromotionRepository extends BaseRepository<Promotion> {
     const snapshot = await this.collection
       .where("isActive", "==", true)
       .where("isDeleted", "!=", true)
-      .where("endDate", ">=", now)
-      .where("startDate", "<=", now)
+      // Firestore index limitation: we cannot reliably do multiple inequality filters
+      // on different fields (`isDeleted`, `endDate`, `startDate`) without explicit
+      // composite indexes.
+      // The filter logic below already exactly verifies the dates in-memory safely.
       .get();
 
     return snapshot.docs
