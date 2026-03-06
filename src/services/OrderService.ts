@@ -71,6 +71,24 @@ export const getOrders = async (
       } as unknown as Order;
       orders.push(order);
     }
+    orders.sort((a, b) => {
+      const getTime = (dateValue: any) => {
+        if (!dateValue) return 0;
+        if (typeof dateValue === "number") {
+          // If it's a seconds timestamp, convert to milliseconds, else assume milliseconds
+          return dateValue < 10000000000 ? dateValue * 1000 : dateValue;
+        }
+        if (typeof dateValue === "object") {
+          if (dateValue._seconds !== undefined)
+            return dateValue._seconds * 1000;
+          if (dateValue.seconds !== undefined) return dateValue.seconds * 1000;
+          if (dateValue.toMillis) return dateValue.toMillis();
+        }
+        return new Date(dateValue).getTime();
+      };
+      return getTime(b.createdAt) - getTime(a.createdAt);
+    });
+
     console.log(`Fetched ${orders.length} orders from Algolia on page ${page}`);
     return {
       dataList: orders,
