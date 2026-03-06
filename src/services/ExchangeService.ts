@@ -58,7 +58,7 @@ export const isOrderEligibleForExchange = (orderCreatedAt: Date): boolean => {
  */
 export const getOrderForExchange = async (
   orderId: string,
-  stockId?: string
+  stockId?: string,
 ): Promise<{
   eligible: boolean;
   order?: Order & { docId: string };
@@ -147,7 +147,7 @@ export const getOrderForExchange = async (
 export const processExchange = async (
   request: ExchangeRequest,
   userId: string,
-  userName?: string
+  userName?: string,
 ): Promise<ExchangeRecord> => {
   const {
     originalOrderId,
@@ -163,34 +163,56 @@ export const processExchange = async (
   if (!eligibilityCheck.eligible || !eligibilityCheck.order) {
     throw new AppError(
       eligibilityCheck.message || "Order not eligible for exchange",
-      400
+      400,
     );
   }
 
   const order = eligibilityCheck.order;
 
-  // 2. Validate returned items exist in original order
+  // 1b. Fetch existing exchanges to prevent returning more than original quantity
+  const existingExchanges = await getExchangesByOrderId(order.orderId);
+  const returnedQuantitiesMap: Record<string, number> = {};
+
+  existingExchanges.forEach((ex) => {
+    ex.returnedItems.forEach((item) => {
+      const key = `${item.itemId}-${item.variantId}-${item.size}`;
+      returnedQuantitiesMap[key] =
+        (returnedQuantitiesMap[key] || 0) + item.quantity;
+    });
+  });
+
+  // 2. Validate returned items exist in original order and haven't been fully returned
   for (const returnItem of returnedItems) {
     const originalItem = order.items.find(
       (item) =>
         item.itemId === returnItem.itemId &&
         item.variantId === returnItem.variantId &&
-        item.size === returnItem.size
+        item.size === returnItem.size,
     );
 
     if (!originalItem) {
       throw new AppError(
         `Item ${returnItem.name} (${returnItem.size}) not found in original order`,
-        400
+        400,
       );
     }
 
-    if (returnItem.quantity > originalItem.quantity) {
+    const key = `${returnItem.itemId}-${returnItem.variantId}-${returnItem.size}`;
+    const alreadyReturned = returnedQuantitiesMap[key] || 0;
+
+    if (returnItem.quantity + alreadyReturned > originalItem.quantity) {
       throw new AppError(
-        `Cannot return more than ${originalItem.quantity} of ${returnItem.name} (${returnItem.size})`,
-        400
+        `Cannot return ${returnItem.quantity} of ${returnItem.name} (${returnItem.size}). ` +
+          `Previously returned: ${alreadyReturned}. Original quantity: ${originalItem.quantity}.`,
+        400,
       );
     }
+
+    // Ensure returnItem discount matches what was actually paid (pro-rated if needed)
+    // Usually POS should send this, but we validate/enforce it here
+    const perItemDiscount =
+      (originalItem.discount || 0) / originalItem.quantity;
+    returnItem.discount = perItemDiscount * returnItem.quantity;
   }
 
   // 3. Validate replacement items have sufficient stock
@@ -199,26 +221,26 @@ export const processExchange = async (
       replaceItem.itemId,
       replaceItem.variantId,
       replaceItem.size,
-      stockId
+      stockId,
     );
     const currentStock = inventoryResult?.quantity || 0;
 
     if (currentStock < replaceItem.quantity) {
       throw new AppError(
         `Insufficient stock for ${replaceItem.name} (${replaceItem.size}). Available: ${currentStock}`,
-        400
+        400,
       );
     }
   }
 
-  // 4. Calculate totals
+  // 4. Calculate totals (respecting discounts)
   const returnTotal = returnedItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
+    (sum, item) => sum + (item.price * item.quantity - (item.discount || 0)),
+    0,
   );
   const replacementTotal = replacementItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
+    (sum, item) => sum + (item.price * item.quantity - (item.discount || 0)),
+    0,
   );
   const priceDifference = replacementTotal - returnTotal;
 
@@ -226,7 +248,7 @@ export const processExchange = async (
   if (priceDifference < 0) {
     throw new AppError(
       "Refunds are not allowed. Replacement value must be equal to or greater than return value.",
-      400
+      400,
     );
   }
 
@@ -234,7 +256,7 @@ export const processExchange = async (
   if (priceDifference > 0 && !paymentMethod) {
     throw new AppError(
       "Payment method is required when customer owes money.",
-      400
+      400,
     );
   }
 
@@ -245,7 +267,7 @@ export const processExchange = async (
       (i) =>
         i.itemId === rItem.itemId &&
         i.variantId === rItem.variantId &&
-        i.size === rItem.size
+        i.size === rItem.size,
     );
     return {
       ...rItem,
@@ -255,17 +277,17 @@ export const processExchange = async (
 
   // For replacement items: Fetch current product buying price
   const replacementProductIds = Array.from(
-    new Set(replacementItems.map((i) => i.itemId))
+    new Set(replacementItems.map((i) => i.itemId)),
   );
 
-  let replacementProductMap: Record<string, any> = {};
+  const replacementProductMap: Record<string, any> = {};
   if (replacementProductIds.length > 0) {
     const productSnaps = await adminFirestore
       .collection("products")
       .where(
         admin.firestore.FieldPath.documentId(),
         "in",
-        replacementProductIds
+        replacementProductIds,
       )
       .get();
 
@@ -278,8 +300,8 @@ export const processExchange = async (
     const product = replacementProductMap[rItem.itemId];
     let bPrice = 0;
     if (product) {
-      const variant = product.variants?.find(
-        (v: any) => v.variantId === rItem.variantId
+      const variant = (product.variants as any[])?.find(
+        (v) => v.variantId === rItem.variantId,
       );
       bPrice = variant?.buyingPrice || product.buyingPrice || 0;
     }
@@ -299,13 +321,13 @@ export const processExchange = async (
         returnItem.itemId,
         returnItem.variantId,
         returnItem.size,
-        stockId
+        stockId,
       );
 
       if (existingId) {
         // Get current quantity and add returned quantity
         const invDoc = await transaction.get(
-          adminFirestore.collection("stock_inventory").doc(existingId)
+          adminFirestore.collection("stock_inventory").doc(existingId),
         );
         const currentQty = invDoc.data()?.quantity || 0;
         transaction.update(
@@ -313,7 +335,7 @@ export const processExchange = async (
           {
             quantity: currentQty + returnItem.quantity,
             updatedAt: admin.firestore.Timestamp.now(),
-          }
+          },
         );
       } else {
         // Create new inventory record
@@ -329,7 +351,7 @@ export const processExchange = async (
             quantity: returnItem.quantity,
             createdAt: admin.firestore.Timestamp.now(),
             updatedAt: admin.firestore.Timestamp.now(),
-          }
+          },
         );
       }
     }
@@ -340,12 +362,12 @@ export const processExchange = async (
         replaceItem.itemId,
         replaceItem.variantId,
         replaceItem.size,
-        stockId
+        stockId,
       );
 
       if (existingId) {
         const invDoc = await transaction.get(
-          adminFirestore.collection("stock_inventory").doc(existingId)
+          adminFirestore.collection("stock_inventory").doc(existingId),
         );
         const currentQty = invDoc.data()?.quantity || 0;
         const newQty = currentQty - replaceItem.quantity;
@@ -353,7 +375,7 @@ export const processExchange = async (
         if (newQty < 0) {
           throw new AppError(
             `Insufficient stock for ${replaceItem.name} during transaction`,
-            400
+            400,
           );
         }
 
@@ -362,12 +384,12 @@ export const processExchange = async (
           {
             quantity: newQty,
             updatedAt: admin.firestore.Timestamp.now(),
-          }
+          },
         );
       } else {
         throw new AppError(
           `Inventory record not found for ${replaceItem.name}`,
-          400
+          400,
         );
       }
     }
@@ -394,7 +416,7 @@ export const processExchange = async (
 
     transaction.set(
       adminFirestore.collection(EXCHANGES_COLLECTION).doc(exchangeId),
-      exchangeRecord
+      exchangeRecord,
     );
 
     // 5d. Update original order with exchange reference
@@ -403,7 +425,7 @@ export const processExchange = async (
       {
         exchangeIds: admin.firestore.FieldValue.arrayUnion(exchangeId),
         updatedAt: admin.firestore.Timestamp.now(),
-      }
+      },
     );
   });
 
@@ -420,12 +442,12 @@ export const processExchange = async (
     replacementItems.forEach((item) => affectedProductIds.add(item.itemId));
 
     await Promise.all(
-      Array.from(affectedProductIds).map((pid) => updateProductStockCount(pid))
+      Array.from(affectedProductIds).map((pid) => updateProductStockCount(pid)),
     );
   } catch (error) {
     console.error(
       "Failed to update product stock counts after exchange:",
-      error
+      error,
     );
     // Suppress error as the critical transaction succeeded
   }
@@ -441,7 +463,7 @@ export const processExchange = async (
  * Get exchange record by ID
  */
 export const getExchangeById = async (
-  exchangeId: string
+  exchangeId: string,
 ): Promise<ExchangeRecord | null> => {
   const doc = await adminFirestore
     .collection(EXCHANGES_COLLECTION)
@@ -470,7 +492,7 @@ export const getExchangeById = async (
  * Get exchanges by order ID
  */
 export const getExchangesByOrderId = async (
-  orderId: string
+  orderId: string,
 ): Promise<ExchangeRecord[]> => {
   const snapshot = await adminFirestore
     .collection(EXCHANGES_COLLECTION)
@@ -499,7 +521,7 @@ export const getExchangesByOrderId = async (
  */
 export const getRecentExchanges = async (
   stockId?: string,
-  limit: number = 50
+  limit: number = 50,
 ): Promise<ExchangeRecord[]> => {
   let query = adminFirestore
     .collection(EXCHANGES_COLLECTION)
