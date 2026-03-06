@@ -818,114 +818,115 @@ export const calculateCartDiscount = async (
 
     if (promo.conditions) {
       for (const condition of promo.conditions) {
-      if (condition.type === "MIN_AMOUNT") {
-        if (cartTotal < Number(condition.value)) {
-          console.log(
-            `[PromotionService] Condition Failed ${promo.id}: MIN_AMOUNT ${cartTotal} < ${condition.value}`,
-          );
-          conditionsMet = false;
-        }
-      } else if (condition.type === "MIN_QUANTITY") {
-        // If there are specific products, count only those, otherwise count all (Frontend parity)
-        const applicableItems =
-          specificProductIds.length > 0
-            ? cartItems.filter((item) =>
-                specificProductIds.includes(item.productId),
-              )
-            : cartItems;
-
-        const totalQty = applicableItems.reduce(
-          (sum, item) => sum + item.quantity,
-          0,
-        );
-        if (totalQty < Number(condition.value)) {
-          console.log(
-            `[PromotionService] Condition Failed ${promo.id}: MIN_QUANTITY ${totalQty} < ${condition.value}`,
-          );
-          conditionsMet = false;
-        }
-      } else if (condition.type === "SPECIFIC_PRODUCT") {
-        // Check variant restrictions if defined
-        if (
-          condition.variantMode === "SPECIFIC_VARIANTS" &&
-          condition.variantIds
-        ) {
-          const productId = condition.value as string;
-          const productIds = condition.productIds || [productId];
-
-          const hasMatchingVariant = cartItems.some(
-            (item) =>
-              productIds.includes(item.productId) &&
-              item.variantId &&
-              condition.variantIds!.includes(item.variantId),
-          );
-          if (!hasMatchingVariant) {
+        if (condition.type === "MIN_AMOUNT") {
+          if (cartTotal < Number(condition.value)) {
             console.log(
-              `[PromotionService] Condition Failed ${promo.id}: SPECIFIC_VARIANTS not found`,
-            );
-            // NOTE: Frontend treats variant checks strictly if they exist on the condition being iterated.
-            // However, for pure product IDs, it effectively uses the aggregated list.
-            // If we have mixed strict-variant and loose-product conditions, this might be tricky.
-            // Given the logs, the failing conditions are simple product checks.
-
-            // If this condition failed strict variant check, we fail.
-            conditionsMet = false;
-          }
-        } else {
-          // General product check - use the aggregated list (OR logic)
-          // Frontend: if (specificProductIds.length > 0) return items.some(...)
-          const hasProduct = cartItems.some((item) =>
-            specificProductIds.includes(item.productId),
-          );
-
-          if (!hasProduct) {
-            console.log(
-              `[PromotionService] Condition Failed ${promo.id}: SPECIFIC_PRODUCT not found (checked aggregated list)`,
+              `[PromotionService] Condition Failed ${promo.id}: MIN_AMOUNT ${cartTotal} < ${condition.value}`,
             );
             conditionsMet = false;
           }
-        }
-      } else if (condition.type === "CUSTOMER_TAG") {
-        // Validate customer has required tag
-        if (!userId) {
-          console.log(
-            `[PromotionService] Condition Failed ${promo.id}: CUSTOMER_TAG requires authenticated user`,
-          );
-          conditionsMet = false;
-        } else {
-          try {
-            const userDoc = await adminFirestore
-              .collection("users")
-              .doc(userId)
-              .get();
+        } else if (condition.type === "MIN_QUANTITY") {
+          // If there are specific products, count only those, otherwise count all (Frontend parity)
+          const applicableItems =
+            specificProductIds.length > 0
+              ? cartItems.filter((item) =>
+                  specificProductIds.includes(item.productId),
+                )
+              : cartItems;
 
-            if (!userDoc.exists) {
+          const totalQty = applicableItems.reduce(
+            (sum, item) => sum + item.quantity,
+            0,
+          );
+          if (totalQty < Number(condition.value)) {
+            console.log(
+              `[PromotionService] Condition Failed ${promo.id}: MIN_QUANTITY ${totalQty} < ${condition.value}`,
+            );
+            conditionsMet = false;
+          }
+        } else if (condition.type === "SPECIFIC_PRODUCT") {
+          // Check variant restrictions if defined
+          if (
+            condition.variantMode === "SPECIFIC_VARIANTS" &&
+            condition.variantIds
+          ) {
+            const productId = condition.value as string;
+            const productIds = condition.productIds || [productId];
+
+            const hasMatchingVariant = cartItems.some(
+              (item) =>
+                productIds.includes(item.productId) &&
+                item.variantId &&
+                condition.variantIds!.includes(item.variantId),
+            );
+            if (!hasMatchingVariant) {
               console.log(
-                `[PromotionService] Condition Failed ${promo.id}: User ${userId} not found`,
+                `[PromotionService] Condition Failed ${promo.id}: SPECIFIC_VARIANTS not found`,
+              );
+              // NOTE: Frontend treats variant checks strictly if they exist on the condition being iterated.
+              // However, for pure product IDs, it effectively uses the aggregated list.
+              // If we have mixed strict-variant and loose-product conditions, this might be tricky.
+              // Given the logs, the failing conditions are simple product checks.
+
+              // If this condition failed strict variant check, we fail.
+              conditionsMet = false;
+            }
+          } else {
+            // General product check - use the aggregated list (OR logic)
+            // Frontend: if (specificProductIds.length > 0) return items.some(...)
+            const hasProduct = cartItems.some((item) =>
+              specificProductIds.includes(item.productId),
+            );
+
+            if (!hasProduct) {
+              console.log(
+                `[PromotionService] Condition Failed ${promo.id}: SPECIFIC_PRODUCT not found (checked aggregated list)`,
               );
               conditionsMet = false;
-            } else {
-              const userData = userDoc.data();
-              const customerTags = userData?.tags || [];
-              const requiredTag = condition.value as string;
+            }
+          }
+        } else if (condition.type === "CUSTOMER_TAG") {
+          // Validate customer has required tag
+          if (!userId) {
+            console.log(
+              `[PromotionService] Condition Failed ${promo.id}: CUSTOMER_TAG requires authenticated user`,
+            );
+            conditionsMet = false;
+          } else {
+            try {
+              const userDoc = await adminFirestore
+                .collection("users")
+                .doc(userId)
+                .get();
 
-              if (!customerTags.includes(requiredTag)) {
+              if (!userDoc.exists) {
                 console.log(
-                  `[PromotionService] Condition Failed ${promo.id}: Customer missing tag "${requiredTag}"`,
+                  `[PromotionService] Condition Failed ${promo.id}: User ${userId} not found`,
                 );
                 conditionsMet = false;
               } else {
-                console.log(
-                  `[PromotionService] CUSTOMER_TAG validated for ${promo.id}: Customer has tag "${requiredTag}"`,
-                );
+                const userData = userDoc.data();
+                const customerTags = userData?.tags || [];
+                const requiredTag = condition.value as string;
+
+                if (!customerTags.includes(requiredTag)) {
+                  console.log(
+                    `[PromotionService] Condition Failed ${promo.id}: Customer missing tag "${requiredTag}"`,
+                  );
+                  conditionsMet = false;
+                } else {
+                  console.log(
+                    `[PromotionService] CUSTOMER_TAG validated for ${promo.id}: Customer has tag "${requiredTag}"`,
+                  );
+                }
               }
+            } catch (error) {
+              console.error(
+                `[PromotionService] Error checking CUSTOMER_TAG for ${promo.id}:`,
+                error,
+              );
+              conditionsMet = false;
             }
-          } catch (error) {
-            console.error(
-              `[PromotionService] Error checking CUSTOMER_TAG for ${promo.id}:`,
-              error,
-            );
-            conditionsMet = false;
           }
         }
       }
