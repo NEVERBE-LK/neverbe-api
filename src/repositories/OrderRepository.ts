@@ -32,7 +32,6 @@ export class OrderRepository extends BaseRepository<Order> {
   async findByOrderId(orderId: string): Promise<Order | null> {
     const snapshot = await this.collection
       .where("orderId", "==", orderId)
-      .where("from", "==", "Website")
       .limit(1)
       .get();
 
@@ -65,7 +64,7 @@ export class OrderRepository extends BaseRepository<Order> {
   async updatePaymentStatus(
     docId: string,
     paymentId: string,
-    status: string
+    status: string,
   ): Promise<Order> {
     await this.collection.doc(docId).update({
       paymentId,
@@ -124,7 +123,7 @@ export class OrderRepository extends BaseRepository<Order> {
    * Count orders by item (for hot products calculation)
    */
   async countOrdersByItem(
-    limit: number = 100
+    limit: number = 100,
   ): Promise<Record<string, number>> {
     const snapshot = await this.collection.limit(limit).get();
     const itemCount: Record<string, number> = {};
