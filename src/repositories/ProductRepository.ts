@@ -198,11 +198,11 @@ export class ProductRepository extends BaseRepository<Product> {
   async findNewArrivals(
     options: ProductQueryOptions = {}
   ): Promise<PaginatedResult<Product>> {
-    // Logic: Look for CreatedAt > 30 days ago
+    // Logic: Look for CreatedAt > 90 days ago (3 months)
     const { page = 1, size = 20 } = options;
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const dateThreshold = thirtyDaysAgo.toISOString();
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const dateThreshold = ninetyDaysAgo.toISOString();
 
     let builder = new FirestoreQueryBuilder(this.getListedProductsQuery())
       .where("createdAt", ">=", dateThreshold)

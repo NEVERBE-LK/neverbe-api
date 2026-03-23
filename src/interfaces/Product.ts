@@ -29,6 +29,10 @@ export interface Product {
   gender?: string[]; // ["men", "women", "kids"]
   availableSizes?: string[]; // For size filtering
 
+  // Enrichment flags for UI labels
+  isNewArrival?: boolean;
+  isRestockingSoon?: boolean;
+
   // Optional timestamps if needed
   createdAt?: any;
   updatedAt?: any;

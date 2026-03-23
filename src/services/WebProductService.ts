@@ -18,6 +18,7 @@ const buildAlgoliaFiltersForWeb = (options: {
   inStock?: boolean;
   sizes?: string[];
   gender?: string;
+  createdAtMin?: number;
 }): string => {
   const filters: string[] = ["isDeleted:false", "status:true", "listing:true"];
 
@@ -53,6 +54,10 @@ const buildAlgoliaFiltersForWeb = (options: {
     filters.push(`(${sizeFilters})`);
   }
 
+  if (options.createdAtMin) {
+    filters.push(`createdAt >= ${options.createdAtMin}`);
+  }
+
   return filters.join(" AND ");
 };
 
@@ -73,6 +78,69 @@ const mapAlgoliaHitsToProducts = (
   });
 };
 
+// ====================== Enrichment Helpers ======================
+
+/**
+ * Identify product IDs from all APPROVED purchase orders
+ */
+const getApprovedPOProductIds = async (): Promise<Set<string>> => {
+  const snapshot = await adminFirestore
+    .collection("purchase_orders")
+    .where("status", "==", "APPROVED")
+    .get();
+
+  const productIds = new Set<string>();
+  snapshot.forEach((doc) => {
+    const po = doc.data();
+    if (Array.isArray(po.items)) {
+      po.items.forEach((item: any) => {
+        if (item.productId) productIds.add(item.productId);
+      });
+    }
+  });
+  return productIds;
+};
+
+/**
+ * Enrich products with "New Arrival" and "Restock Soon" labels
+ */
+const enrichProductsWithLabels = async (
+  products: Product[],
+): Promise<Product[]> => {
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+  const approvedPOProductIds = await getApprovedPOProductIds();
+
+  return products.map((product) => {
+    let createdAtDate: Date | null = null;
+
+    if (product.createdAt) {
+      if (typeof product.createdAt === "number") {
+        createdAtDate = new Date(
+          product.createdAt < 100000000000
+            ? product.createdAt * 1000
+            : product.createdAt,
+        );
+      } else {
+        createdAtDate = new Date(product.createdAt);
+      }
+    }
+
+    const isNewArrival = createdAtDate && createdAtDate >= ninetyDaysAgo;
+
+    const isRestockingSoon =
+      !product.inStock &&
+      approvedPOProductIds.has(product.id || product.productId);
+
+    return {
+      ...product,
+      isNewArrival: !!isNewArrival,
+      isRestockingSoon: !!isRestockingSoon,
+    };
+  });
+};
+
 // ====================== Products ======================
 export const getProducts = async (options: {
   tags?: string[];
@@ -90,7 +158,10 @@ export const getProducts = async (options: {
     filters: filtersStr,
   });
 
-  return { total: nbHits, dataList: mapAlgoliaHitsToProducts(hits) };
+  const products = mapAlgoliaHitsToProducts(hits);
+  const enriched = await enrichProductsWithLabels(products);
+
+  return { total: nbHits, dataList: enriched };
 };
 
 /**
@@ -120,29 +191,79 @@ export const getProductsFiltered = async (
     filters: filtersStr,
   });
 
-  return { total: nbHits, dataList: mapAlgoliaHitsToProducts(hits) };
+  const products = mapAlgoliaHitsToProducts(hits);
+  const enriched = await enrichProductsWithLabels(products);
+
+  return { total: nbHits, dataList: enriched };
 };
 
 // ====================== New Arrivals ======================
 export const getNewArrivals = async (
-  page: number = 1,
-  size: number = 20,
-): Promise<{ total: number; dataList: Product[] }> =>
-  productRepository.findNewArrivals({ page, size });
+  options: {
+    page?: number;
+    size?: number;
+    tags?: string[];
+    brand?: string;
+    category?: string;
+    inStock?: boolean;
+    sizes?: string[];
+    gender?: string;
+  } = {},
+): Promise<{ total: number; dataList: Product[] }> => {
+  const { page = 1, size = 20, ...rest } = options;
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const threshold = ninetyDaysAgo.getTime();
+
+  const filtersStr = buildAlgoliaFiltersForWeb({
+    ...rest,
+    createdAtMin: threshold,
+  });
+
+  const { hits, nbHits } = await searchProducts("", {
+    page: page - 1,
+    hitsPerPage: size,
+    filters: filtersStr,
+  });
+
+  const products = mapAlgoliaHitsToProducts(hits);
+  const enriched = await enrichProductsWithLabels(products);
+  return { total: nbHits, dataList: enriched };
+};
 
 // ====================== Recent Items ======================
-export const getRecentItems = async () => productRepository.findRecent(8);
+export const getRecentItems = async (limit: number = 8) => {
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const threshold = ninetyDaysAgo.getTime();
+
+  const filtersStr = buildAlgoliaFiltersForWeb({
+    createdAtMin: threshold,
+  });
+
+  const { hits } = await searchProducts("", {
+    page: 0,
+    hitsPerPage: limit,
+    filters: filtersStr,
+  });
+
+  const products = mapAlgoliaHitsToProducts(hits);
+  return enrichProductsWithLabels(products);
+};
 
 // ====================== Get Product By ID ======================
 export const getProductById = async (itemId: string) => {
   const product = await productRepository.findById(itemId);
   if (!product) throw new Error(`Product not found: ${itemId}`);
-  return product;
+  const enriched = await enrichProductsWithLabels([product]);
+  return enriched[0];
 };
 
 // ====================== Get Similar Items ======================
-export const getSimilarItems = async (itemId: string) =>
-  productRepository.findSimilar(itemId, 8);
+export const getSimilarItems = async (itemId: string) => {
+  const products = await productRepository.findSimilar(itemId, 8);
+  return enrichProductsWithLabels(products);
+};
 
 // ====================== Get Product Stock ======================
 export const getProductStock = async (
@@ -241,9 +362,11 @@ export const getHotProducts = async () => {
   const products = await productRepository.findByIds(sortedItemIds);
 
   // Filter out unlisted, inactive, or deleted products to prevent "leaking"
-  return products.filter(
+  const filtered = products.filter(
     (p) => p.listing === true && p.status === true && !p.isDeleted,
   );
+
+  return enrichProductsWithLabels(filtered);
 };
 
 // ====================== Deals Products (Complex Business Logic) ======================
@@ -470,7 +593,8 @@ export const getDealsProducts = async (
     dataList = [...dataList, ...deduped];
   }
 
-  return { total, dataList };
+  const enriched = await enrichProductsWithLabels(dataList);
+  return { total, dataList: enriched };
 };
 
 /**
