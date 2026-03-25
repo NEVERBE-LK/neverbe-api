@@ -49,7 +49,15 @@ export async function POST(request: NextRequest) {
   try {
     const decodedToken = await verifyPosAuth("process_pos_exchange");
 
-    const body = await request.json();
+    // Standardized FormData + JSON data parsing
+    const formData = await request.formData();
+    const dataString = formData.get("data") as string;
+
+    if (!dataString) {
+      return errorResponse("No data provided", 400);
+    }
+
+    const body = JSON.parse(dataString);
 
     // Validate required fields
     if (!body.originalOrderId) {

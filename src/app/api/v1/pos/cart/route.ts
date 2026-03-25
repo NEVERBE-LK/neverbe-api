@@ -30,7 +30,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const decodedToken = await verifyPosAuth("manage_pos_cart");
-    const item = await request.json();
+    
+    // Standardized FormData + JSON data parsing
+    const formData = await request.formData();
+    const dataString = formData.get("data") as string;
+    
+    if (!dataString) {
+      return errorResponse("No data provided", 400);
+    }
+
+    const item = JSON.parse(dataString);
     await addItemToPosCart(item, decodedToken.uid);
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -42,7 +51,16 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const decodedToken = await verifyPosAuth("manage_pos_cart");
-    const body = await request.json();
+
+    // Standardized FormData + JSON data parsing for DELETE
+    const formData = await request.formData();
+    const dataString = formData.get("data") as string;
+
+    if (!dataString) {
+      return errorResponse("No data provided", 400);
+    }
+
+    const body = JSON.parse(dataString);
 
     // If clearAll flag is set, clear entire cart
     if (body.clearAll) {
