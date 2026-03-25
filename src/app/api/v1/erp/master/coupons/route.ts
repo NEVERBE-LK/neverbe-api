@@ -26,7 +26,15 @@ export const POST = async (req: NextRequest) => {
     const authorized = await authorizeRequest(req, "create_coupons");
     if (!authorized) return errorResponse("Unauthorized", 401);
 
-    const data = await req.json();
+    const formData = await req.formData();
+    const rawData = formData.get("data") as string;
+    
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const data = JSON.parse(rawData);
+
     if (!data.code || !data.discountType) {
       return errorResponse("Code and Discount Type required", 400);
     }

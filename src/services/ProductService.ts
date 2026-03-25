@@ -3,7 +3,7 @@ import { Product } from "@/model/Product";
 import { ProductVariant } from "@/model/ProductVariant";
 import { nanoid } from "nanoid";
 import { FieldValue } from "firebase-admin/firestore";
-import { toSafeLocaleString, cleanData } from "./UtilService";
+import { toSafeLocaleString } from "./UtilService";
 import { Order } from "@/model/Order";
 import { PopularItem } from "@/model/PopularItem";
 import { Timestamp } from "firebase-admin/firestore";
@@ -50,10 +50,9 @@ export const addProducts = async (product: Partial<Product>, file: File) => {
     v.sizes?.forEach((s) => allSizes.add(s)),
   );
 
-  const cleanedProduct = cleanData(product);
 
   const newProductDocument: any = {
-    ...cleanedProduct, 
+    ...product, 
     id: id,
     productId: id,
     thumbnail: thumbnail,
@@ -110,10 +109,9 @@ export const updateProduct = async (
     thumbnail = await uploadThumbnail(file, id);
   }
 
-  const cleanedData = cleanData(product);
 
   const updatedProductDocument = {
-    ...cleanedData,
+    ...product,
     thumbnail: thumbnail,
     nameLower: product.name?.toLowerCase(),
     tags: tags,

@@ -20,22 +20,6 @@ const uploadBanner = async (file: File, id: string): Promise<string> => {
   return url;
 };
 
-/**
- * Recursively removes undefined values from an object to prevent Firestore errors.
- */
-const cleanData = (obj: any): any => {
-  if (Array.isArray(obj)) {
-    return obj.map((v) => cleanData(v));
-  } else if (obj !== null && typeof obj === "object" && !(obj instanceof Date) && !(obj instanceof Timestamp)) {
-    return Object.fromEntries(
-      Object.entries(obj)
-        .filter(([_, v]) => v !== undefined)
-        .map(([k, v]) => [k, cleanData(v)])
-    );
-  }
-  return obj;
-};
-
 // --- PROMOTIONS CRUD ---
 
 export const getPromotions = async (
@@ -92,13 +76,12 @@ export const createPromotion = async (
     bannerUrl = await uploadBanner(file, docId);
   }
 
-  const cleanedData = cleanData(data);
 
   const newPromo = {
-    ...cleanedData,
+    ...data,
     bannerUrl,
-    startDate: cleanedData.startDate ? new Date(cleanedData.startDate as any) : null,
-    endDate: cleanedData.endDate ? new Date(cleanedData.endDate as any) : null,
+    startDate: data.startDate ? new Date(data.startDate as any) : null,
+    endDate: data.endDate ? new Date(data.endDate as any) : null,
     usageCount: 0,
     isDeleted: false,
     createdAt: now,
@@ -129,10 +112,9 @@ export const updatePromotion = async (
 
   console.log("Updating Promotion ID:", id, "With Data:", updateData);
 
-  const cleanedData = cleanData(updateData);
 
   const payload: any = {
-    ...cleanedData,
+    ...updateData,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
@@ -141,11 +123,11 @@ export const updatePromotion = async (
     payload.bannerUrl = bannerUrl;
   }
 
-  if (cleanedData.startDate) {
-    payload.startDate = new Date(cleanedData.startDate as any);
+  if (updateData.startDate) {
+    payload.startDate = new Date(updateData.startDate as any);
   }
-  if (cleanedData.endDate) {
-    payload.endDate = new Date(cleanedData.endDate as any);
+  if (updateData.endDate) {
+    payload.endDate = new Date(updateData.endDate as any);
   }
 
   await docRef.update(payload);
@@ -199,19 +181,16 @@ export const updateCoupon = async (
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { createdAt, ...updateData } = data;
 
-  // Clean and remove undefined
-  const cleanedData = cleanData(updateData);
-
   const payload: any = {
-    ...cleanedData,
+    ...updateData,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
-  if (cleanedData.startDate) {
-    payload.startDate = new Date(cleanedData.startDate as any);
+  if (updateData.startDate) {
+    payload.startDate = new Date(updateData.startDate as any);
   }
-  if (cleanedData.endDate) {
-    payload.endDate = new Date(cleanedData.endDate as any);
+  if (updateData.endDate) {
+    payload.endDate = new Date(updateData.endDate as any);
   }
 
   await docRef.update(payload);
@@ -300,10 +279,8 @@ export const createCoupon = async (
     const id = nanoid(10);
     const now = FieldValue.serverTimestamp();
 
-    const cleanedData = cleanData(data);
-
     const newCoupon = {
-      ...cleanedData,
+      ...data,
       id,
       usageCount: 0,
       isDeleted: false,

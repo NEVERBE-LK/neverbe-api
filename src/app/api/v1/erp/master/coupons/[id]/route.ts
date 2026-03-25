@@ -19,7 +19,14 @@ export const PUT = async (req: NextRequest, { params }: Props) => {
     if (!authorized) return errorResponse("Unauthorized", 401);
 
     const { id } = await params;
-    const data = await req.json();
+    const formData = await req.formData();
+    const rawData = formData.get("data") as string;
+
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const data = JSON.parse(rawData);
     const updated = await updateCoupon(id, data);
     return NextResponse.json(updated);
   } catch (error: any) {

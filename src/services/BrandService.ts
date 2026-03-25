@@ -4,7 +4,6 @@ import { FieldValue } from "firebase-admin/firestore";
 import { nanoid } from "nanoid";
 import { AppError } from "@/utils/apiResponse";
 import { uploadCompressedImage } from "./StorageService";
-import { cleanData } from "./UtilService";
 
 const COLLECTION = "brands";
 
@@ -20,10 +19,9 @@ export const createBrand = async (brand: Partial<Brand>, logo?: File) => {
     );
   }
 
-  const cleanedBrand = cleanData(brand);
 
   const data: Brand = {
-    ...cleanedBrand,
+    ...brand,
     id,
     name: brand.name!,
     description: brand.description || "",
@@ -130,10 +128,9 @@ export const updateBrand = async (
     );
   }
 
-  const cleanedUpdates = cleanData(updates);
 
   const updatedData = {
-    ...cleanedUpdates,
+    ...updates,
     logoUrl,
     updatedAt: FieldValue.serverTimestamp(),
   };

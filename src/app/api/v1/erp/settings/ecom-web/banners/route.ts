@@ -25,11 +25,15 @@ export const POST = async (req: Request) => {
       return errorResponse("Unauthorized", 401);
     }
     const formData = await req.formData();
+    const rawData = formData.get("data") as string;
 
-    const res = await uploadFile(
-      formData.get("banner") as File,
-      <string>formData.get("path")
-    );
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const { path } = JSON.parse(rawData);
+
+    const res = await uploadFile(formData.get("banner") as File, path);
     const writeResult = await addABanner(res);
     return NextResponse.json(writeResult);
   } catch (error: any) {

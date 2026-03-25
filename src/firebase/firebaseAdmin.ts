@@ -18,6 +18,7 @@ if (!admin.apps.length) {
 }
 
 export const adminFirestore = admin.firestore();
+adminFirestore.settings({ ignoreUndefinedProperties: true });
 export const adminAuth = admin.auth();
 export const adminStorageBucket = admin
   .storage()

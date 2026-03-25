@@ -2,7 +2,7 @@ import { adminFirestore, adminStorageBucket } from "@/firebase/firebaseAdmin";
 import { ComboProduct } from "@/model/ComboProduct";
 import { FieldValue } from "firebase-admin/firestore";
 import { nanoid } from "nanoid";
-import { toSafeLocaleString, cleanData } from "./UtilService";
+import { toSafeLocaleString } from "./UtilService";
 import { AppError } from "@/utils/apiResponse";
 import { uploadCompressedImage } from "./StorageService";
 
@@ -72,10 +72,9 @@ export const createCombo = async (
     thumbnail = await uploadThumbnail(file, docId);
   }
 
-  const cleanedData = cleanData(data);
 
   const newCombo = {
-    ...cleanedData,
+    ...data,
     startDate: data.startDate ? new Date(data.startDate as any) : null,
     endDate: data.endDate ? new Date(data.endDate as any) : null,
     createdAt: now,
@@ -119,10 +118,9 @@ export const updateCombo = async (
     newThumbnail = await uploadThumbnail(file, id);
   }
 
-  const cleanedUpdateData = cleanData(updateData);
 
   const payload: any = {
-    ...cleanedUpdateData,
+    ...updateData,
     ...(newThumbnail ? { thumbnail: newThumbnail } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   };

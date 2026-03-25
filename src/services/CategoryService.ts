@@ -2,7 +2,6 @@ import { adminFirestore } from "@/firebase/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
 import { nanoid } from "nanoid";
 import { AppError } from "@/utils/apiResponse";
-import { cleanData } from "./UtilService";
 
 export interface Category {
   id?: string;
@@ -19,13 +18,12 @@ const COLLECTION = "categories";
 // CREATE
 export const createCategory = async (category: Category) => {
   const id = `c-${nanoid(8)}`.toLowerCase(); // generates a short 8-character unique ID
-  const cleanedCategory = cleanData(category);
 
   await adminFirestore
     .collection(COLLECTION)
     .doc(id)
     .set({
-      ...cleanedCategory,
+      ...category,
       id,
       active: category.active ?? true,
       isDeleted: false,
@@ -115,9 +113,8 @@ export const updateCategory = async (id: string, data: Partial<Category>) => {
     throw new AppError("Category not found", 404);
   }
 
-  const cleanedData = cleanData(data);
 
-  await ref.update({ ...cleanedData, updatedAt: FieldValue.serverTimestamp() });
+  await ref.update({ ...data, updatedAt: FieldValue.serverTimestamp() });
   const updatedDoc = await ref.get();
   return { id: updatedDoc.id, ...(updatedDoc.data() as Category) };
 };
