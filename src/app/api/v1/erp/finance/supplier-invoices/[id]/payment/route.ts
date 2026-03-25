@@ -12,8 +12,14 @@ export const POST = async (
     if (!response) return errorResponse("Unauthorized", 401);
 
     const { id } = await params;
-    const body = await req.json();
-    const { amount, bankAccountId, notes } = body;
+    const formData = await req.formData();
+    const dataString = formData.get("data") as string;
+
+    if (!dataString) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const { amount, bankAccountId, notes } = JSON.parse(dataString);
 
     if (!amount || amount <= 0) {
       return errorResponse("Invalid amount", 400);

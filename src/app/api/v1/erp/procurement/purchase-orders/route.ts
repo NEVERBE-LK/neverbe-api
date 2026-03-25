@@ -38,7 +38,14 @@ export const POST = async (req: Request) => {
     const response = await authorizeRequest(req, "create_purchase_orders");
     if (!response) return errorResponse("Unauthorized", 401);
 
-    const body = await req.json();
+    const formData = await req.formData();
+    const data = formData.get("data");
+
+    if (!data) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const body = JSON.parse(data as string);
     const po = await createPurchaseOrder(body);
     return NextResponse.json(po, { status: 201 });
   } catch (error: any) {

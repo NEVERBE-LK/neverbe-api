@@ -39,15 +39,13 @@ export const PUT = async (
     const { id } = await params;
     const formData = await req.formData();
     const file = formData.get("attachment") as File | null;
+    const dataField = formData.get("data");
 
-    const data: any = {};
-    formData.forEach((value, key) => {
-      if (key !== "attachment") {
-        data[key] = value;
-      }
-    });
+    if (!dataField) {
+      return errorResponse("Data is required", 400);
+    }
 
-    if (data.amount) data.amount = parseFloat(data.amount);
+    const data = JSON.parse(dataField as string);
 
     // Check if this is a review action (status change to APPROVED/REJECTED)
     if (data.status === "APPROVED" || data.status === "REJECTED") {

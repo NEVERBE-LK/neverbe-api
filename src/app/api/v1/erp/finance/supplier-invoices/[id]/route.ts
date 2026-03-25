@@ -37,11 +37,13 @@ export const PUT = async (
     const { id } = await params;
     const formData = await req.formData();
     const file = formData.get("attachment") as File | null;
+    const dataString = formData.get("data") as string;
 
-    const data: any = {};
-    formData.forEach((value, key) => {
-      if (key !== "attachment") data[key] = value;
-    });
+    if (!dataString) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const data = JSON.parse(dataString);
 
     const invoice = await updateSupplierInvoice(id, data, file || undefined);
     return NextResponse.json(invoice);

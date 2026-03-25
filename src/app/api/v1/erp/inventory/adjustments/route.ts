@@ -42,7 +42,14 @@ export const POST = async (req: Request) => {
       return errorResponse("Unauthorized", 401);
     }
 
-    const body = await req.json();
+    const formData = await req.formData();
+    const data = formData.get("data");
+
+    if (!data) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const body = JSON.parse(data as string);
     const adjustment = await createAdjustment(body, user.userId);
     return NextResponse.json(adjustment, { status: 201 });
   } catch (error: any) {

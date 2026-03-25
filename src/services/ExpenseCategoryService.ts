@@ -58,12 +58,19 @@ export const createExpenseCategory = async (
 /**
  * Get all expense categories
  */
-export const getExpenseCategories = async (): Promise<ExpenseCategory[]> => {
+export const getExpenseCategories = async (
+  type?: "expense" | "income"
+): Promise<ExpenseCategory[]> => {
   try {
-    const snapshot = await adminFirestore
+    let query = adminFirestore
       .collection(COLLECTION)
-      .where("isDeleted", "==", false)
-      .get();
+      .where("isDeleted", "==", false);
+
+    if (type) {
+      query = query.where("type", "==", type);
+    }
+
+    const snapshot = await query.get();
 
     return snapshot.docs.map((doc) => ({
       id: doc.id,

@@ -38,7 +38,14 @@ export const PUT = async (
     if (!response) return errorResponse("Unauthorized", 401);
 
     const { id } = await params;
-    const body = await req.json();
+    const formData = await req.formData();
+    const data = formData.get("data");
+
+    if (!data) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const body = JSON.parse(data as string);
 
     // Handle status update separately
     if (body.status && Object.keys(body).length === 1) {

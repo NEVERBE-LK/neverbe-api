@@ -42,15 +42,13 @@ export const POST = async (req: NextRequest) => {
 
     const formData = await req.formData();
     const file = formData.get("attachment") as File | null;
+    const dataField = formData.get("data");
 
-    const data: any = {};
-    formData.forEach((value, key) => {
-      if (key !== "attachment") {
-        data[key] = value;
-      }
-    });
+    if (!dataField) {
+      return errorResponse("Data is required", 400);
+    }
 
-    if (data.amount) data.amount = parseFloat(data.amount);
+    const data = JSON.parse(dataField as string);
 
     // Set createdBy from authenticated user
     if (user.userId) {

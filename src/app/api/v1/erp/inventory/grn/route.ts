@@ -27,7 +27,14 @@ export const POST = async (req: Request) => {
     const response = await authorizeRequest(req, "create_grn");
     if (!response) return errorResponse("Unauthorized", 401);
 
-    const body = await req.json();
+    const formData = await req.formData();
+    const data = formData.get("data");
+
+    if (!data) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const body = JSON.parse(data as string);
     const grn = await createGRN(body);
     return NextResponse.json(grn, { status: 201 });
   } catch (error: any) {

@@ -41,11 +41,13 @@ export const POST = async (req: Request) => {
 
     const formData = await req.formData();
     const file = formData.get("attachment") as File | null;
+    const dataString = formData.get("data") as string;
 
-    const data: any = {};
-    formData.forEach((value, key) => {
-      if (key !== "attachment") data[key] = value;
-    });
+    if (!dataString) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const data = JSON.parse(dataString);
 
     if (response.userId) data.createdBy = response.userId;
 

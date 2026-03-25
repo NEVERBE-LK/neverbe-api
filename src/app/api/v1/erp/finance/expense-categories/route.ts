@@ -33,7 +33,14 @@ export const POST = async (req: Request) => {
     const response = await authorizeRequest(req, "manage_expense_categories");
     if (!response) return errorResponse("Unauthorized", 401);
 
-    const body = await req.json();
+    const formData = await req.formData();
+    const data = formData.get("data");
+
+    if (!data) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const body = JSON.parse(data as string);
     const category = await createExpenseCategory(body);
     return NextResponse.json(category, { status: 201 });
   } catch (error: any) {

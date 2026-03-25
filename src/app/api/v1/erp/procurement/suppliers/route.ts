@@ -37,7 +37,14 @@ export const POST = async (req: Request) => {
     const response = await authorizeRequest(req, "create_suppliers");
     if (!response) return errorResponse("Unauthorized", 401);
 
-    const body = await req.json();
+    const formData = await req.formData();
+    const data = formData.get("data");
+
+    if (!data) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const body = JSON.parse(data as string);
     const supplier = await createSupplier(body);
     return NextResponse.json(supplier, { status: 201 });
   } catch (error: unknown) {
