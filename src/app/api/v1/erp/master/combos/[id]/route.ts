@@ -43,12 +43,6 @@ export const PUT = async (req: NextRequest, props: Props) => {
 
     const payload: Partial<UnparsedComboData> = {};
 
-    // Helper to add if exists
-    const addIfExists = (key: keyof UnparsedComboData, val: any) => {
-      if (val !== null && val !== undefined) {
-        payload[key] = val;
-      }
-    };
 
     if (formData.has("name")) payload.name = formData.get("name") as string;
     if (formData.has("description"))
@@ -74,9 +68,8 @@ export const PUT = async (req: NextRequest, props: Props) => {
     if (formData.has("endDate"))
       payload.endDate = formData.get("endDate") as string;
 
-    await updateCombo(params.id, payload as any, file || undefined);
-
-    return NextResponse.json({ message: "Updated successfully" });
+    const updated = await updateCombo(params.id, payload as any, file || undefined);
+    return NextResponse.json(updated);
   } catch (error: any) {
     return errorResponse(error);
   }
@@ -104,8 +97,8 @@ export const DELETE = async (req: NextRequest, props: Props) => {
     const user = await authorizeRequest(req, "delete_combos");
     if (!user) return errorResponse("Unauthorized", 401);
 
-    await deleteCombo(params.id);
-    return NextResponse.json({ message: "Deleted successfully" });
+    const result = await deleteCombo(params.id);
+    return NextResponse.json(result);
   } catch (error: any) {
     return errorResponse(error);
   }

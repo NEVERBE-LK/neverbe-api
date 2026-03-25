@@ -60,7 +60,7 @@ export const createSize = async (data: Size) => {
       nameLower: data.name.toLowerCase(),
       isDeleted: false,
     });
-  return { id, ...data };
+  return { id, ...data, nameLower: data.name.toLowerCase(), isDeleted: false };
 };
 
 // 🔹 Update Size
@@ -76,7 +76,8 @@ export const updateSize = async (id: string, data: Partial<Size>) => {
     (data as any).nameLower = data.name.toLowerCase();
   }
   await docRef.update(data);
-  return { id, ...data };
+  const updatedDoc = await docRef.get();
+  return { id: updatedDoc.id, ...(updatedDoc.data() as Size) };
 };
 
 // 🔹 Delete Size (soft delete)

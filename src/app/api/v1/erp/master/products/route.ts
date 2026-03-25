@@ -108,12 +108,9 @@ export const POST = async (req: NextRequest) => {
     }
 
     const productData = await parseProductFromFormData(formData);
-    await addProducts(productData, file);
+    const result = await addProducts(productData, file);
 
-    return NextResponse.json(
-      { message: "Product created successfully" },
-      { status: 201 }
-    );
+    return NextResponse.json(result, { status: 201 });
   } catch (error: any) {
     return errorResponse(error);
   }

@@ -69,8 +69,8 @@ export const addProducts = async (product: Partial<Product>, file: File) => {
     .doc(id)
     .set(newProductDocument);
 
-  console.log(`Product added with ID: ${id}`);
-  return true;
+  const doc = await adminFirestore.collection(PRODUCTS_COLLECTION).doc(id).get();
+  return { id: doc.id, productId: doc.id, ...(doc.data() as Product) };
 };
 
 /**
@@ -134,8 +134,8 @@ export const updateProduct = async (
     .doc(id)
     .set(updatedProductDocument, { merge: true }); // Use set with merge
 
-  console.log(`Product updated with ID: ${id}`);
-  return true;
+  const doc = await adminFirestore.collection(PRODUCTS_COLLECTION).doc(id).get();
+  return { id: doc.id, productId: doc.id, ...(doc.data() as Product) };
 };
 
 export const getProducts = async (

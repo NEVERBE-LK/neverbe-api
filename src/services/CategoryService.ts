@@ -29,7 +29,8 @@ export const createCategory = async (category: Category) => {
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
-  return { success: true, id };
+  const doc = await adminFirestore.collection(COLLECTION).doc(id).get();
+  return { id: doc.id, ...(doc.data() as Category) };
 };
 
 export const getCategories = async ({
@@ -112,7 +113,8 @@ export const updateCategory = async (id: string, data: Partial<Category>) => {
   }
 
   await ref.update({ ...data, updatedAt: FieldValue.serverTimestamp() });
-  return { success: true };
+  const updatedDoc = await ref.get();
+  return { id: updatedDoc.id, ...(updatedDoc.data() as Category) };
 };
 
 // SOFT DELETE

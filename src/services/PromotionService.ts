@@ -102,7 +102,7 @@ export const updatePromotion = async (
   id: string,
   data: Partial<Promotion>,
   file?: File | null,
-): Promise<void> => {
+): Promise<Promotion> => {
   const docRef = adminFirestore.collection(PROMOTIONS_COLLECTION).doc(id);
   const docSnap = await docRef.get();
 
@@ -145,9 +145,11 @@ export const updatePromotion = async (
   }
 
   await docRef.update(payload);
+  const updatedDoc = await docRef.get();
+  return { id: updatedDoc.id, ...updatedDoc.data() } as Promotion;
 };
 
-export const deletePromotion = async (id: string): Promise<void> => {
+export const deletePromotion = async (id: string): Promise<{ id: string }> => {
   const docRef = adminFirestore.collection(PROMOTIONS_COLLECTION).doc(id);
   const docSnap = await docRef.get();
 
@@ -159,6 +161,7 @@ export const deletePromotion = async (id: string): Promise<void> => {
     isDeleted: true,
     updatedAt: FieldValue.serverTimestamp(),
   });
+  return { id };
 };
 
 export const getPromotionById = async (id: string): Promise<Promotion> => {
@@ -180,7 +183,7 @@ export const getPromotionById = async (id: string): Promise<Promotion> => {
 export const updateCoupon = async (
   id: string,
   data: Partial<Coupon>,
-): Promise<void> => {
+): Promise<Coupon> => {
   const docRef = adminFirestore.collection(COUPONS_COLLECTION).doc(id);
   const docSnap = await docRef.get();
 
@@ -213,9 +216,11 @@ export const updateCoupon = async (
   }
 
   await docRef.update(payload);
+  const updatedDoc = await docRef.get();
+  return { id: updatedDoc.id, ...updatedDoc.data() } as Coupon;
 };
 
-export const deleteCoupon = async (id: string): Promise<void> => {
+export const deleteCoupon = async (id: string): Promise<{ id: string }> => {
   const docRef = adminFirestore.collection(COUPONS_COLLECTION).doc(id);
   const docSnap = await docRef.get();
 
@@ -227,6 +232,7 @@ export const deleteCoupon = async (id: string): Promise<void> => {
     isDeleted: true,
     updatedAt: FieldValue.serverTimestamp(),
   });
+  return { id };
 };
 
 export const getCouponByCode = async (code: string): Promise<Coupon | null> => {

@@ -31,7 +31,7 @@ export const createBrand = async (brand: Partial<Brand>, logo?: File) => {
   };
 
   await adminFirestore.collection(COLLECTION).doc(id).set(data);
-  return { success: true, id };
+  return data;
 };
 
 export const getBrands = async ({
@@ -133,7 +133,8 @@ export const updateBrand = async (
   };
 
   await ref.update(updatedData);
-  return { success: true };
+  const updatedDoc = await ref.get();
+  return { id: updatedDoc.id, ...(updatedDoc.data() as Brand) };
 };
 
 // 🔹 Soft delete

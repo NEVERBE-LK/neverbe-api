@@ -36,7 +36,7 @@ export const POST = async (req: Request) => {
       { name, description, status: active },
       logo || undefined
     );
-    return NextResponse.json(result);
+    return NextResponse.json(result, { status: 201 });
   } catch (err) {
     return errorResponse(err);
   }

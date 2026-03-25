@@ -16,8 +16,8 @@ export const DELETE = async (req: Request, { params }: Props) => {
       return errorResponse("Unauthorized", 401);
     }
     const { id } = await params;
-    await deletePromotion(id);
-    return NextResponse.json({ message: "Promotion deleted" });
+    const result = await deletePromotion(id);
+    return NextResponse.json(result);
   } catch (error: any) {
     console.error("[Promotions API] Delete Error:", error);
     return errorResponse(error);

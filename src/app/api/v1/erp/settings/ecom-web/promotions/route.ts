@@ -34,8 +34,8 @@ export const POST = async (req: Request) => {
     }
 
     const { url } = await uploadFile(file, "promotions");
-    const id = await addPromotion({ file: file.name, url, title, link });
-    return NextResponse.json({ id });
+    const result = await addPromotion({ file: file.name, url, title, link });
+    return NextResponse.json(result, { status: 201 });
   } catch (error: any) {
     console.error("[Promotions API] Error:", error);
     return errorResponse(error);

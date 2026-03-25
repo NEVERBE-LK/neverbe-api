@@ -33,7 +33,7 @@ export const POST = async (req: NextRequest) => {
     if (!category.name) return errorResponse("Name is required", 400);
 
     const res = await createCategory(category);
-    return NextResponse.json(res);
+    return NextResponse.json(res, { status: 201 });
   } catch (e) {
     return errorResponse(e);
   }

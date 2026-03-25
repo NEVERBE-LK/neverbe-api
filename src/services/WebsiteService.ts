@@ -67,7 +67,7 @@ export const addPromotion = async (data: WebsitePromotion) => {
       ...data,
       createdAt: new Date(),
     });
-    return docRef.id;
+    return { id: docRef.id, ...data, createdAt: new Date() };
   } catch (e) {
     console.error("Error adding promotion:", e);
     throw e;
@@ -77,6 +77,7 @@ export const addPromotion = async (data: WebsitePromotion) => {
 export const deletePromotion = async (id: string) => {
   try {
     await adminFirestore.collection("website_promotions").doc(id).delete();
+    return { id };
   } catch (e) {
     console.error("Error deleting promotion:", e);
     throw e;
@@ -114,6 +115,7 @@ export const addABanner = async (data: any) => {
 export const deleteBanner = async (id: string) => {
   try {
     await adminFirestore.collection("website_banners").doc(id).delete();
+    return { id };
   } catch (e) {
     console.error("Error deleting banner:", e);
     throw e;

@@ -32,8 +32,7 @@ export const POST = async (req: Request) => {
       return errorResponse("Name and status are required", 400);
 
     const result = await createSize(sizeData);
-
-    return NextResponse.json(result);
+    return NextResponse.json(result, { status: 201 });
   } catch (err: any) {
     return errorResponse(err);
   }

@@ -110,9 +110,8 @@ export const PUT = async (req: NextRequest, { params }: RouteParams) => {
 
     // Pass the product data and the (potentially null) new file
     // Pass the product data and the (potentially null) new file
-    await updateProduct(productId, productData, file);
-
-    return NextResponse.json({ message: "Product updated successfully" });
+    const result = await updateProduct(productId, productData, file);
+    return NextResponse.json(result);
   } catch (error: any) {
     return errorResponse(error);
   }

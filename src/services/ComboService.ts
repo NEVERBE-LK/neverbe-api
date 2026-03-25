@@ -91,7 +91,7 @@ export const updateCombo = async (
   id: string,
   data: Partial<ComboProduct>,
   file?: File,
-): Promise<void> => {
+): Promise<ComboProduct> => {
   const docRef = adminFirestore.collection(COMBOS_COLLECTION).doc(id);
   const docSnap = await docRef.get();
 
@@ -145,9 +145,11 @@ export const updateCombo = async (
   });
 
   await docRef.update(payload);
+  const updatedDoc = await docRef.get();
+  return { id: updatedDoc.id, ...updatedDoc.data() } as ComboProduct;
 };
 
-export const deleteCombo = async (id: string): Promise<void> => {
+export const deleteCombo = async (id: string): Promise<{ id: string }> => {
   const docRef = adminFirestore.collection(COMBOS_COLLECTION).doc(id);
   const docSnap = await docRef.get();
 
@@ -159,6 +161,7 @@ export const deleteCombo = async (id: string): Promise<void> => {
     isDeleted: true,
     updatedAt: FieldValue.serverTimestamp(),
   });
+  return { id };
 };
 
 export const getComboById = async (id: string): Promise<ComboProduct> => {

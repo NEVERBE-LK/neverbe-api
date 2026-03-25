@@ -38,7 +38,6 @@ export const PUT = async (
       return errorResponse("Name and status are required", 400);
 
     const result = await updateSize(sizeId, sizeData);
-
     return NextResponse.json(result);
   } catch (err: any) {
     return errorResponse(err);
