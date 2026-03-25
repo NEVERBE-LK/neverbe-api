@@ -29,7 +29,14 @@ export const POST = async (req: NextRequest) => {
     const user = await authorizeRequest(req, "view_master_data");
     if (!user) return errorResponse("Unauthorized", 401);
 
-    const category = await req.json();
+    const formData = await req.formData();
+    const rawData = formData.get("data") as string;
+    
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+    
+    const category = JSON.parse(rawData);
     if (!category.name) return errorResponse("Name is required", 400);
 
     const res = await createCategory(category);

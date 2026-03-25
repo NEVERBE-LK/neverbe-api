@@ -26,8 +26,14 @@ export const POST = async (req: Request) => {
     const user = await authorizeRequest(req, "view_master_data");
     if (!user) return errorResponse("Unauthorized", 401);
 
-    const sizeData = await req.json();
+    const formData = await req.formData();
+    const rawData = formData.get("data") as string;
 
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const sizeData = JSON.parse(rawData);
     if (!sizeData.name || !sizeData.status)
       return errorResponse("Name and status are required", 400);
 

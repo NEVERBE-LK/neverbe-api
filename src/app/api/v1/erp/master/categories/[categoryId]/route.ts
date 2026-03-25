@@ -39,7 +39,14 @@ export const PUT = async (
     const user = await authorizeRequest(req, "view_master_data");
     if (!user) return errorResponse("Unauthorized", 401);
 
-    const data = await req.json();
+    const formData = await req.formData();
+    const rawData = formData.get("data") as string;
+
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const data = JSON.parse(rawData);
     if (!data.name || !data.status) {
       return errorResponse("Name and Status are required", 400);
     }

@@ -38,7 +38,14 @@ export const POST = async (req: NextRequest) => {
     const user = await authorizeRequest(req, "view_master_data");
     if (!user) return errorResponse("Unauthorized", 401);
 
-    const data = await req.json();
+    const formData = await req.formData();
+    const rawData = formData.get("data") as string;
+    
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+    
+    const data = JSON.parse(rawData);
 
     // Basic Validation
     if (

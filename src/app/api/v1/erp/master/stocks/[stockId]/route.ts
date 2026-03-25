@@ -15,7 +15,14 @@ export const PUT = async (
 
     if (!stockId) return errorResponse("Stock ID is required", 400);
 
-    const data = await req.json();
+    const formData = await req.formData();
+    const rawData = formData.get("data") as string;
+
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const data = JSON.parse(rawData);
     const updateData: any = {};
 
     // Validate and build update object
