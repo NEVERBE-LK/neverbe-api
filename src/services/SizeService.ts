@@ -2,6 +2,7 @@ import { adminFirestore } from "@/firebase/firebaseAdmin";
 import { Size } from "@/model/Size";
 import { AppError } from "@/utils/apiResponse";
 import { nanoid } from "nanoid";
+import { cleanData } from "./UtilService";
 
 const COLLECTION = "sizes";
 
@@ -52,11 +53,12 @@ export const getSizes = async ({
 // 🔹 Create Size
 export const createSize = async (data: Size) => {
   const id = `sz-${nanoid(8)}`;
+  const cleanedData = cleanData(data);
   await adminFirestore
     .collection(COLLECTION)
     .doc(id)
     .set({
-      ...data,
+      ...cleanedData,
       nameLower: data.name.toLowerCase(),
       isDeleted: false,
     });
@@ -71,11 +73,12 @@ export const updateSize = async (id: string, data: Partial<Size>) => {
     throw new AppError(`Size with ID ${id} not found`, 404);
   }
 
-  if (data.name) {
+  const cleanedData = cleanData(data);
+  if (cleanedData.name) {
     // Note: Assuming nameLower is needed but not strictly typed in Partial<Size>
-    (data as any).nameLower = data.name.toLowerCase();
+    (cleanedData as any).nameLower = cleanedData.name.toLowerCase();
   }
-  await docRef.update(data);
+  await docRef.update(cleanedData);
   const updatedDoc = await docRef.get();
   return { id: updatedDoc.id, ...(updatedDoc.data() as Size) };
 };

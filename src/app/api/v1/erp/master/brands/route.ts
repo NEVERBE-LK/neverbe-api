@@ -27,15 +27,16 @@ export const POST = async (req: Request) => {
     if (!user) return errorResponse("Unauthorized", 401);
 
     const formData = await req.formData();
-    const name = formData.get("name") as string;
-    const description = formData.get("description") as string;
-    const active = formData.get("status") === "true";
     const logo = formData.get("logo") as File | null;
+    const rawData = formData.get("data") as string;
 
-    const result = await createBrand(
-      { name, description, status: active },
-      logo || undefined
-    );
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const brandData = JSON.parse(rawData);
+
+    const result = await createBrand(brandData, logo || undefined);
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
     return errorResponse(err);

@@ -21,80 +21,19 @@ const uploadBanner = async (file: File, id: string): Promise<string> => {
 };
 
 /**
- * Normalizes promotion data to ensure correct types (numbers, booleans)
+ * Recursively removes undefined values from an object to prevent Firestore errors.
  */
-const normalizePromotionData = (data: any) => {
-  const normalized = { ...data };
-
-  if ("priority" in normalized) normalized.priority = Number(normalized.priority);
-  if ("usageLimit" in normalized)
-    normalized.usageLimit = Number(normalized.usageLimit);
-  if ("perUserLimit" in normalized)
-    normalized.perUserLimit = Number(normalized.perUserLimit);
-
-  if ("isActive" in normalized) {
-    normalized.isActive = String(normalized.isActive) === "true";
+const cleanData = (obj: any): any => {
+  if (Array.isArray(obj)) {
+    return obj.map((v) => cleanData(v));
+  } else if (obj !== null && typeof obj === "object" && !(obj instanceof Date) && !(obj instanceof Timestamp)) {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, cleanData(v)])
+    );
   }
-  if ("stackable" in normalized) {
-    normalized.stackable = String(normalized.stackable) === "true";
-  }
-  if ("isDeleted" in normalized) {
-    normalized.isDeleted = String(normalized.isDeleted) === "true";
-  }
-
-  if (normalized.actions && Array.isArray(normalized.actions)) {
-    normalized.actions = normalized.actions.map((action: any) => ({
-      ...action,
-      value: Number(action.value),
-      maxDiscount: action.maxDiscount ? Number(action.maxDiscount) : undefined,
-    }));
-  }
-
-  if (normalized.conditions && Array.isArray(normalized.conditions)) {
-    normalized.conditions = normalized.conditions.map((condition: any) => {
-      const cond = { ...condition };
-      if (["MIN_QUANTITY", "MIN_AMOUNT"].includes(cond.type)) {
-        cond.value = Number(cond.value);
-      }
-      return cond;
-    });
-  }
-
-  return normalized;
-};
-
-/**
- * Normalizes coupon data to ensure correct types (numbers, booleans)
- */
-const normalizeCouponData = (data: any) => {
-  const normalized = { ...data };
-
-  if ("discountValue" in normalized)
-    normalized.discountValue = Number(normalized.discountValue);
-  if ("maxDiscount" in normalized)
-    normalized.maxDiscount = normalized.maxDiscount
-      ? Number(normalized.maxDiscount)
-      : undefined;
-  if ("minOrderAmount" in normalized)
-    normalized.minOrderAmount = Number(normalized.minOrderAmount);
-  if ("usageLimit" in normalized)
-    normalized.usageLimit = Number(normalized.usageLimit);
-  if ("perUserLimit" in normalized)
-    normalized.perUserLimit = Number(normalized.perUserLimit);
-  if ("minQuantity" in normalized)
-    normalized.minQuantity = Number(normalized.minQuantity);
-
-  if ("isActive" in normalized) {
-    normalized.isActive = String(normalized.isActive) === "true";
-  }
-  if ("isDeleted" in normalized) {
-    normalized.isDeleted = String(normalized.isDeleted) === "true";
-  }
-  if ("firstOrderOnly" in normalized) {
-    normalized.firstOrderOnly = String(normalized.firstOrderOnly) === "true";
-  }
-
-  return normalized;
+  return obj;
 };
 
 // --- PROMOTIONS CRUD ---
@@ -153,13 +92,13 @@ export const createPromotion = async (
     bannerUrl = await uploadBanner(file, docId);
   }
 
-  const normalizedData = normalizePromotionData(data);
+  const cleanedData = cleanData(data);
 
   const newPromo = {
-    ...normalizedData,
+    ...cleanedData,
     bannerUrl,
-    startDate: normalizedData.startDate ? new Date(normalizedData.startDate as any) : null,
-    endDate: normalizedData.endDate ? new Date(normalizedData.endDate as any) : null,
+    startDate: cleanedData.startDate ? new Date(cleanedData.startDate as any) : null,
+    endDate: cleanedData.endDate ? new Date(cleanedData.endDate as any) : null,
     usageCount: 0,
     isDeleted: false,
     createdAt: now,
@@ -171,10 +110,9 @@ export const createPromotion = async (
     .doc(docId)
     .set(newPromo);
 
-  return { id: docId, ...newPromo } as unknown as Promotion; // Typecast because Timestamp vs FieldValues
+  return { id: docId, ...newPromo } as unknown as Promotion;
 };
 
-// ... updatePromotion ...
 export const updatePromotion = async (
   id: string,
   data: Partial<Promotion>,
@@ -187,17 +125,14 @@ export const updatePromotion = async (
     throw new AppError(`Promotion with ID ${id} not found`, 404);
   }
 
-  // Remove createdAt to prevent overwriting with malformed data
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { createdAt, ...updateData } = data;
 
-  console.log("Updating Promotion ID:", id, "With Data:", updateData); // DEBUG log
+  console.log("Updating Promotion ID:", id, "With Data:", updateData);
 
-  // Normalize and enforce types
-  const normalizedData = normalizePromotionData(updateData);
+  const cleanedData = cleanData(updateData);
 
   const payload: any = {
-    ...normalizedData,
+    ...cleanedData,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
@@ -206,11 +141,11 @@ export const updatePromotion = async (
     payload.bannerUrl = bannerUrl;
   }
 
-  if (normalizedData.startDate) {
-    payload.startDate = new Date(normalizedData.startDate as any);
+  if (cleanedData.startDate) {
+    payload.startDate = new Date(cleanedData.startDate as any);
   }
-  if (normalizedData.endDate) {
-    payload.endDate = new Date(normalizedData.endDate as any);
+  if (cleanedData.endDate) {
+    payload.endDate = new Date(cleanedData.endDate as any);
   }
 
   await docRef.update(payload);
@@ -264,19 +199,19 @@ export const updateCoupon = async (
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { createdAt, ...updateData } = data;
 
-  // Normalize and enforce types
-  const normalizedData = normalizeCouponData(updateData);
+  // Clean and remove undefined
+  const cleanedData = cleanData(updateData);
 
   const payload: any = {
-    ...normalizedData,
+    ...cleanedData,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
-  if (normalizedData.startDate) {
-    payload.startDate = new Date(normalizedData.startDate as any);
+  if (cleanedData.startDate) {
+    payload.startDate = new Date(cleanedData.startDate as any);
   }
-  if (normalizedData.endDate) {
-    payload.endDate = new Date(normalizedData.endDate as any);
+  if (cleanedData.endDate) {
+    payload.endDate = new Date(cleanedData.endDate as any);
   }
 
   await docRef.update(payload);
@@ -365,10 +300,10 @@ export const createCoupon = async (
     const id = nanoid(10);
     const now = FieldValue.serverTimestamp();
 
-    const normalizedData = normalizeCouponData(data);
+    const cleanedData = cleanData(data);
 
     const newCoupon = {
-      ...normalizedData,
+      ...cleanedData,
       id,
       usageCount: 0,
       isDeleted: false,
@@ -906,8 +841,8 @@ export const calculateCartDiscount = async (
           const applicableItems =
             specificProductIds.length > 0
               ? cartItems.filter((item) =>
-                  specificProductIds.includes(item.productId),
-                )
+                specificProductIds.includes(item.productId),
+              )
               : cartItems;
 
           const totalQty = applicableItems.reduce(

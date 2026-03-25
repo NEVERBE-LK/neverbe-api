@@ -2,7 +2,7 @@ import { adminFirestore, adminStorageBucket } from "@/firebase/firebaseAdmin";
 import { ComboProduct } from "@/model/ComboProduct";
 import { FieldValue } from "firebase-admin/firestore";
 import { nanoid } from "nanoid";
-import { toSafeLocaleString } from "./UtilService";
+import { toSafeLocaleString, cleanData } from "./UtilService";
 import { AppError } from "@/utils/apiResponse";
 import { uploadCompressedImage } from "./StorageService";
 
@@ -72,8 +72,10 @@ export const createCombo = async (
     thumbnail = await uploadThumbnail(file, docId);
   }
 
+  const cleanedData = cleanData(data);
+
   const newCombo = {
-    ...data,
+    ...cleanedData,
     startDate: data.startDate ? new Date(data.startDate as any) : null,
     endDate: data.endDate ? new Date(data.endDate as any) : null,
     createdAt: now,
@@ -117,32 +119,13 @@ export const updateCombo = async (
     newThumbnail = await uploadThumbnail(file, id);
   }
 
+  const cleanedUpdateData = cleanData(updateData);
+
   const payload: any = {
-    ...updateData,
+    ...cleanedUpdateData,
+    ...(newThumbnail ? { thumbnail: newThumbnail } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   };
-
-  // Only include thumbnail if we have a new one or the existing one is valid
-  if (newThumbnail) {
-    payload.thumbnail = newThumbnail;
-  } else if (existingThumbnail && existingThumbnail.url) {
-    payload.thumbnail = existingThumbnail;
-  }
-  // If no thumbnail data, don't include it in the update (keeps existing value)
-
-  if (updateData.startDate) {
-    payload.startDate = new Date(updateData.startDate as any);
-  }
-  if (updateData.endDate) {
-    payload.endDate = new Date(updateData.endDate as any);
-  }
-
-  // Remove any undefined values from payload
-  Object.keys(payload).forEach((key) => {
-    if (payload[key] === undefined) {
-      delete payload[key];
-    }
-  });
 
   await docRef.update(payload);
   const updatedDoc = await docRef.get();

@@ -33,16 +33,16 @@ export const PUT = async (
     if (!user) return errorResponse("Unauthorized", 401);
 
     const formData = await req.formData();
-    const name = formData.get("name") as string;
-    const description = formData.get("description") as string;
-    const status = formData.get("status") === "true";
     const logo = formData.get("logo") as File | null;
+    const rawData = formData.get("data") as string;
 
-    const result = await updateBrand(
-      brandId,
-      { name, description, status },
-      logo || undefined
-    );
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
+
+    const brandData = JSON.parse(rawData);
+
+    const result = await updateBrand(brandId, brandData, logo || undefined);
     return NextResponse.json(result);
   } catch (err) {
     return errorResponse(err);

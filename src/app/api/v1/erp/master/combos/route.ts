@@ -26,64 +26,22 @@ export const POST = async (req: NextRequest) => {
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
+    const rawData = formData.get("data") as string;
 
-    const rawItems = formData.get("items");
-    const items = rawItems ? JSON.parse(rawItems as string) : [];
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
 
-    const name = formData.get("name") as string;
+    const comboData = JSON.parse(rawData);
 
-    if (!name || items.length === 0) {
+    // Basic Validation
+    if (!comboData.name || !comboData.items || comboData.items.length === 0) {
       return errorResponse("Name and at least one item required", 400);
     }
 
-    const payload: UnparsedComboData = {
-      name: name,
-      description: formData.get("description") as string,
-      items: items,
-      originalPrice: Number(formData.get("originalPrice")),
-      comboPrice: Number(formData.get("comboPrice")),
-      savings: Number(formData.get("savings")),
-      type: formData.get("type") as any,
-      status: formData.get("status") as any,
-      buyQuantity: formData.get("buyQuantity")
-        ? Number(formData.get("buyQuantity"))
-        : undefined,
-      getQuantity: formData.get("getQuantity")
-        ? Number(formData.get("getQuantity"))
-        : undefined,
-      getDiscount: formData.get("getDiscount")
-        ? Number(formData.get("getDiscount"))
-        : undefined,
-      startDate: formData.get("startDate") as string,
-      endDate: formData.get("endDate") as string,
-    };
-
-    // Remove undefined keys
-    Object.keys(payload).forEach(
-      (key) =>
-        payload[key as keyof UnparsedComboData] === undefined &&
-        delete payload[key as keyof UnparsedComboData]
-    );
-
-    const combo = await createCombo(payload as any, file || undefined);
+    const combo = await createCombo(comboData, file || undefined);
     return NextResponse.json(combo, { status: 201 });
   } catch (error: any) {
     return errorResponse(error);
   }
 };
-
-interface UnparsedComboData {
-  name: string;
-  description: string;
-  items: any[];
-  originalPrice: number;
-  comboPrice: number;
-  savings: number;
-  type: string;
-  status: string;
-  buyQuantity?: number;
-  getQuantity?: number;
-  getDiscount?: number;
-  startDate?: string;
-  endDate?: string;
-}

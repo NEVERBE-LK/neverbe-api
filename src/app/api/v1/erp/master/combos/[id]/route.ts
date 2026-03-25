@@ -37,59 +37,20 @@ export const PUT = async (req: NextRequest, props: Props) => {
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
+    const rawData = formData.get("data") as string;
 
-    const rawItems = formData.get("items");
-    const items = rawItems ? JSON.parse(rawItems as string) : undefined;
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
+    }
 
-    const payload: Partial<UnparsedComboData> = {};
+    const comboData = JSON.parse(rawData);
 
-
-    if (formData.has("name")) payload.name = formData.get("name") as string;
-    if (formData.has("description"))
-      payload.description = formData.get("description") as string;
-    if (items) payload.items = items;
-    if (formData.has("originalPrice"))
-      payload.originalPrice = Number(formData.get("originalPrice"));
-    if (formData.has("comboPrice"))
-      payload.comboPrice = Number(formData.get("comboPrice"));
-    if (formData.has("savings"))
-      payload.savings = Number(formData.get("savings"));
-    if (formData.has("type")) payload.type = formData.get("type") as string;
-    if (formData.has("status"))
-      payload.status = formData.get("status") as string;
-    if (formData.has("buyQuantity"))
-      payload.buyQuantity = Number(formData.get("buyQuantity"));
-    if (formData.has("getQuantity"))
-      payload.getQuantity = Number(formData.get("getQuantity"));
-    if (formData.has("getDiscount"))
-      payload.getDiscount = Number(formData.get("getDiscount"));
-    if (formData.has("startDate"))
-      payload.startDate = formData.get("startDate") as string;
-    if (formData.has("endDate"))
-      payload.endDate = formData.get("endDate") as string;
-
-    const updated = await updateCombo(params.id, payload as any, file || undefined);
+    const updated = await updateCombo(params.id, comboData, file || undefined);
     return NextResponse.json(updated);
   } catch (error: any) {
     return errorResponse(error);
   }
 };
-
-interface UnparsedComboData {
-  name: string;
-  description: string;
-  items: any[];
-  originalPrice: number;
-  comboPrice: number;
-  savings: number;
-  type: string;
-  status: string;
-  buyQuantity?: number;
-  getQuantity?: number;
-  getDiscount?: number;
-  startDate?: string;
-  endDate?: string;
-}
 
 export const DELETE = async (req: NextRequest, props: Props) => {
   const params = await props.params;

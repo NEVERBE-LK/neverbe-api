@@ -31,3 +31,24 @@ export const toSafeLocaleString = (val: any) => {
     return String(val);
   }
 };
+
+/**
+ * Recursively removes undefined values from an object to prevent Firestore errors.
+ */
+export const cleanData = (obj: any): any => {
+  if (Array.isArray(obj)) {
+    return obj.map((v) => cleanData(v));
+  } else if (
+    obj !== null &&
+    typeof obj === "object" &&
+    !(obj instanceof Date) &&
+    !(obj instanceof Timestamp)
+  ) {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, cleanData(v)])
+    );
+  }
+  return obj;
+};

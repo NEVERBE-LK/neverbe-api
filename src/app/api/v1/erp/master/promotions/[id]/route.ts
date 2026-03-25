@@ -37,31 +37,13 @@ export const PUT = async (req: NextRequest, { params }: Props) => {
     const { id } = await params;
     const formData = await req.formData();
     const file = formData.get("banner") as File | null;
+    const rawData = formData.get("data") as string;
 
-    // Parse JSON-encoded fields or reconstruct object
-    const data: any = {};
-    for (const [key, value] of Array.from(formData.entries())) {
-      if (key === "banner") continue;
-      if (
-        [
-          "conditions",
-          "actions",
-          "applicableProducts",
-          "applicableProductVariants",
-          "applicableCategories",
-          "applicableBrands",
-          "excludedProducts",
-        ].includes(key)
-      ) {
-        try {
-          data[key] = JSON.parse(value as string);
-        } catch {
-          data[key] = value;
-        }
-      } else {
-        data[key] = value;
-      }
+    if (!rawData) {
+      return errorResponse("Data is required", 400);
     }
+
+    const data = JSON.parse(rawData);
 
     const updated = await updatePromotion(id, data, file);
     return NextResponse.json(updated);
