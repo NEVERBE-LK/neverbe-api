@@ -20,6 +20,83 @@ const uploadBanner = async (file: File, id: string): Promise<string> => {
   return url;
 };
 
+/**
+ * Normalizes promotion data to ensure correct types (numbers, booleans)
+ */
+const normalizePromotionData = (data: any) => {
+  const normalized = { ...data };
+
+  if ("priority" in normalized) normalized.priority = Number(normalized.priority);
+  if ("usageLimit" in normalized)
+    normalized.usageLimit = Number(normalized.usageLimit);
+  if ("perUserLimit" in normalized)
+    normalized.perUserLimit = Number(normalized.perUserLimit);
+
+  if ("isActive" in normalized) {
+    normalized.isActive = String(normalized.isActive) === "true";
+  }
+  if ("stackable" in normalized) {
+    normalized.stackable = String(normalized.stackable) === "true";
+  }
+  if ("isDeleted" in normalized) {
+    normalized.isDeleted = String(normalized.isDeleted) === "true";
+  }
+
+  if (normalized.actions && Array.isArray(normalized.actions)) {
+    normalized.actions = normalized.actions.map((action: any) => ({
+      ...action,
+      value: Number(action.value),
+      maxDiscount: action.maxDiscount ? Number(action.maxDiscount) : undefined,
+    }));
+  }
+
+  if (normalized.conditions && Array.isArray(normalized.conditions)) {
+    normalized.conditions = normalized.conditions.map((condition: any) => {
+      const cond = { ...condition };
+      if (["MIN_QUANTITY", "MIN_AMOUNT"].includes(cond.type)) {
+        cond.value = Number(cond.value);
+      }
+      return cond;
+    });
+  }
+
+  return normalized;
+};
+
+/**
+ * Normalizes coupon data to ensure correct types (numbers, booleans)
+ */
+const normalizeCouponData = (data: any) => {
+  const normalized = { ...data };
+
+  if ("discountValue" in normalized)
+    normalized.discountValue = Number(normalized.discountValue);
+  if ("maxDiscount" in normalized)
+    normalized.maxDiscount = normalized.maxDiscount
+      ? Number(normalized.maxDiscount)
+      : undefined;
+  if ("minOrderAmount" in normalized)
+    normalized.minOrderAmount = Number(normalized.minOrderAmount);
+  if ("usageLimit" in normalized)
+    normalized.usageLimit = Number(normalized.usageLimit);
+  if ("perUserLimit" in normalized)
+    normalized.perUserLimit = Number(normalized.perUserLimit);
+  if ("minQuantity" in normalized)
+    normalized.minQuantity = Number(normalized.minQuantity);
+
+  if ("isActive" in normalized) {
+    normalized.isActive = String(normalized.isActive) === "true";
+  }
+  if ("isDeleted" in normalized) {
+    normalized.isDeleted = String(normalized.isDeleted) === "true";
+  }
+  if ("firstOrderOnly" in normalized) {
+    normalized.firstOrderOnly = String(normalized.firstOrderOnly) === "true";
+  }
+
+  return normalized;
+};
+
 // --- PROMOTIONS CRUD ---
 
 export const getPromotions = async (
@@ -76,14 +153,14 @@ export const createPromotion = async (
     bannerUrl = await uploadBanner(file, docId);
   }
 
+  const normalizedData = normalizePromotionData(data);
+
   const newPromo = {
-    ...data,
+    ...normalizedData,
     bannerUrl,
-    startDate: data.startDate ? new Date(data.startDate as any) : null,
-    endDate: data.endDate ? new Date(data.endDate as any) : null,
+    startDate: normalizedData.startDate ? new Date(normalizedData.startDate as any) : null,
+    endDate: normalizedData.endDate ? new Date(normalizedData.endDate as any) : null,
     usageCount: 0,
-    isActive: String(data.isActive) === "true",
-    stackable: String(data.stackable) === "true",
     isDeleted: false,
     createdAt: now,
     updatedAt: now,
@@ -116,8 +193,11 @@ export const updatePromotion = async (
 
   console.log("Updating Promotion ID:", id, "With Data:", updateData); // DEBUG log
 
+  // Normalize and enforce types
+  const normalizedData = normalizePromotionData(updateData);
+
   const payload: any = {
-    ...updateData,
+    ...normalizedData,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
@@ -126,22 +206,11 @@ export const updatePromotion = async (
     payload.bannerUrl = bannerUrl;
   }
 
-  if (updateData.startDate) {
-    payload.startDate = new Date(updateData.startDate as any);
+  if (normalizedData.startDate) {
+    payload.startDate = new Date(normalizedData.startDate as any);
   }
-  if (updateData.endDate) {
-    payload.endDate = new Date(updateData.endDate as any);
-  }
-
-  // Enforce boolean types for status flags
-  if ("isActive" in updateData) {
-    payload.isActive = String(updateData.isActive) === "true";
-  }
-  if ("stackable" in updateData) {
-    payload.stackable = String(updateData.stackable) === "true";
-  }
-  if ("isDeleted" in updateData) {
-    payload.isDeleted = String(updateData.isDeleted) === "true";
+  if (normalizedData.endDate) {
+    payload.endDate = new Date(normalizedData.endDate as any);
   }
 
   await docRef.update(payload);
@@ -195,24 +264,19 @@ export const updateCoupon = async (
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { createdAt, ...updateData } = data;
 
+  // Normalize and enforce types
+  const normalizedData = normalizeCouponData(updateData);
+
   const payload: any = {
-    ...updateData,
+    ...normalizedData,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
-  if (updateData.startDate) {
-    payload.startDate = new Date(updateData.startDate as any);
+  if (normalizedData.startDate) {
+    payload.startDate = new Date(normalizedData.startDate as any);
   }
-  if (updateData.endDate) {
-    payload.endDate = new Date(updateData.endDate as any);
-  }
-
-  // Enforce boolean types for status flags
-  if ("isActive" in updateData) {
-    payload.isActive = Boolean(updateData.isActive);
-  }
-  if ("isDeleted" in updateData) {
-    payload.isDeleted = Boolean(updateData.isDeleted);
+  if (normalizedData.endDate) {
+    payload.endDate = new Date(normalizedData.endDate as any);
   }
 
   await docRef.update(payload);
@@ -301,8 +365,10 @@ export const createCoupon = async (
     const id = nanoid(10);
     const now = FieldValue.serverTimestamp();
 
+    const normalizedData = normalizeCouponData(data);
+
     const newCoupon = {
-      ...data,
+      ...normalizedData,
       id,
       usageCount: 0,
       isDeleted: false,
