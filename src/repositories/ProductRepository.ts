@@ -9,6 +9,8 @@ import { ProductFilterBuilder } from "./filters/ProductFilterBuilder";
  */
 export interface ProductQueryOptions {
   tags?: string[];
+  brand?: string;
+  category?: string;
   inStock?: boolean;
   page?: number;
   size?: number;

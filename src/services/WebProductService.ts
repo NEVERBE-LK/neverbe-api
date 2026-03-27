@@ -150,18 +150,9 @@ export const getProducts = async (options: {
   page?: number;
   size?: number;
 }): Promise<{ total: number; dataList: Product[] }> => {
-  const { page = 1, size = 20, ...rest } = options;
-  const filtersStr = buildAlgoliaFiltersForWeb(rest);
-  const { hits, nbHits } = await searchProducts("", {
-    page: page - 1,
-    hitsPerPage: size,
-    filters: filtersStr,
-  });
-
-  const products = mapAlgoliaHitsToProducts(hits);
-  const enriched = await enrichProductsWithLabels(products);
-
-  return { total: nbHits, dataList: enriched };
+  const result = await productRepository.findAll(options);
+  const enriched = await enrichProductsWithLabels(result.dataList);
+  return { ...result, dataList: enriched };
 };
 
 /**
@@ -181,20 +172,9 @@ export interface ProductFilterOptions {
 export const getProductsFiltered = async (
   options: ProductFilterOptions,
 ): Promise<{ total: number; dataList: Product[] }> => {
-  const filtersStr = buildAlgoliaFiltersForWeb(options);
-  const page = options.page || 1;
-  const size = options.size || 20;
-
-  const { hits, nbHits } = await searchProducts("", {
-    page: page - 1,
-    hitsPerPage: size,
-    filters: filtersStr,
-  });
-
-  const products = mapAlgoliaHitsToProducts(hits);
-  const enriched = await enrichProductsWithLabels(products);
-
-  return { total: nbHits, dataList: enriched };
+  const result = await productRepository.findAllFiltered(options);
+  const enriched = await enrichProductsWithLabels(result.dataList);
+  return { ...result, dataList: enriched };
 };
 
 // ====================== New Arrivals ======================
@@ -210,25 +190,9 @@ export const getNewArrivals = async (
     gender?: string;
   } = {},
 ): Promise<{ total: number; dataList: Product[] }> => {
-  const { page = 1, size = 20, ...rest } = options;
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const threshold = ninetyDaysAgo.getTime();
-
-  const filtersStr = buildAlgoliaFiltersForWeb({
-    ...rest,
-    createdAtMin: threshold,
-  });
-
-  const { hits, nbHits } = await searchProducts("", {
-    page: page - 1,
-    hitsPerPage: size,
-    filters: filtersStr,
-  });
-
-  const products = mapAlgoliaHitsToProducts(hits);
-  const enriched = await enrichProductsWithLabels(products);
-  return { total: nbHits, dataList: enriched };
+  const result = await productRepository.findNewArrivals(options);
+  const enriched = await enrichProductsWithLabels(result.dataList);
+  return { ...result, dataList: enriched };
 };
 
 // ====================== Recent Items ======================
@@ -425,176 +389,16 @@ export const getDealsProducts = async (
   gender?: string,
   sizes?: string[],
 ): Promise<{ total: number; dataList: Product[] }> => {
-  const activePromotions = await getActivePromotions();
-
-  // 1. Check for Global Promotions
-  if (hasGlobalPromotion(activePromotions)) {
-    return getProductsFiltered({
-      tags,
-      inStock,
-      page,
-      size,
-      gender,
-      sizes,
-    });
-  }
-
-  // 2. Fetch & Filter Promoted Products (Priority list)
-  const promoProductIds = getPromotedProductIds(activePromotions);
-  const allPromoIds = Array.from(promoProductIds);
-  let promoProducts: Product[] = [];
-
-  if (allPromoIds.length > 0) {
-    promoProducts = await productRepository.findByIds(allPromoIds);
-
-    // Apply Filters to Promo Products in Memory
-
-    // Tags
-    if (tags && tags.length > 0) {
-      const tagsLower = tags.map((t) => t.toLowerCase());
-      promoProducts = promoProducts.filter((product) => {
-        const productTags = (product.tags || []).map((t: string) =>
-          t.toLowerCase(),
-        );
-        return tagsLower.some((tag) => productTags.includes(tag));
-      });
-    }
-
-    // InStock
-    if (typeof inStock === "boolean") {
-      promoProducts = promoProducts.filter(
-        (product) => product.inStock === inStock,
-      );
-    }
-
-    // Gender
-    if (gender) {
-      promoProducts = promoProducts.filter((product) =>
-        (product.gender || []).some(
-          (g: string) => g.toLowerCase() === gender.toLowerCase(),
-        ),
-      );
-    }
-
-    // Sizes
-    if (sizes && sizes.length > 0) {
-      promoProducts = promoProducts.filter((product) => {
-        const productSizes = new Set<string>();
-        (product.variants || []).forEach((v) => {
-          (v.sizes || []).forEach((s: string) => productSizes.add(s));
-        });
-        return sizes.some((s) => productSizes.has(s));
-      });
-    }
-  }
-
-  const promoCount = promoProducts.length;
-
-  // 3. Get Discounted Products Count
-  // We use Algolia for accurate count of "filling" items
-  const getDiscountedProductsFromAlgolia = async (
-    options: ProductFilterOptions,
-  ): Promise<{ total: number; dataList: Product[] }> => {
-    const filtersStr = buildAlgoliaFiltersForWeb(options) + " AND discount > 0";
-    const p = options.page || 1;
-    const s = options.size || 20;
-
-    const { hits, nbHits } = await searchProducts("", {
-      page: p - 1,
-      hitsPerPage: s,
-      filters: filtersStr,
-    });
-
-    return { total: nbHits, dataList: mapAlgoliaHitsToProducts(hits) };
-  };
-
-  const discountResult = await getDiscountedProductsFromAlgolia({
+  const result = await productRepository.findDiscounted({
+    page,
+    size,
     tags,
     inStock,
     gender,
     sizes,
-    page: 1,
-    size: 1, // Minimal fetch for count
   });
-  const discountTotal = discountResult.total;
-  const total = promoCount + discountTotal;
-
-  // 4. Stitching Strategy
-  // Determine which items to return based on the requested page window
-
-  const startIndex = (page - 1) * size;
-  let dataList: Product[] = [];
-
-  // A) Add Promoted Products if they fall within the range
-  if (startIndex < promoCount) {
-    dataList = promoProducts.slice(startIndex, startIndex + size);
-  }
-
-  // B) Fill remaining slots with Discounted Products
-  if (dataList.length < size) {
-    const remainingSlots = size - dataList.length;
-
-    // Calculate how many discounted items we conceptually skipped "behind" the promo items
-    // If startIndex > promoCount, we skipped (startIndex - promoCount) discounted items.
-    // If startIndex < promoCount, we are just starting to read discounted items from index 0.
-    const discountOffset = Math.max(0, startIndex - promoCount);
-
-    // Mapping implicit logic offset to Page/Size for repository
-    // We need items from [discountOffset] to [discountOffset + remainingSlots]
-    // Since repository is Page-based (size=20 usually), we might span across 2 pages.
-    // Note: We use the requested 'size' (default 10 or 20) as the chunk size.
-
-    const pageA = Math.floor(discountOffset / size) + 1;
-    const pageB = Math.floor((discountOffset + remainingSlots) / size) + 1;
-
-    const promises = [
-      getDiscountedProductsFromAlgolia({
-        tags,
-        inStock,
-        gender,
-        sizes,
-        page: pageA,
-        size: size,
-      }),
-    ];
-
-    if (pageB !== pageA) {
-      promises.push(
-        getDiscountedProductsFromAlgolia({
-          tags,
-          inStock,
-          gender,
-          sizes,
-          page: pageB,
-          size: size,
-        }),
-      );
-    }
-
-    const results = await Promise.all(promises);
-
-    // Merge results from potential multiple pages
-    let potentialDiscounts = results[0].dataList;
-    if (results[1]) {
-      potentialDiscounts = [...potentialDiscounts, ...results[1].dataList];
-    }
-
-    // Extract the exact slice we need relative to the fetched pages
-    const pageAStart = (pageA - 1) * size;
-    const relativeStart = discountOffset - pageAStart;
-
-    const neededDiscounts = potentialDiscounts.slice(
-      relativeStart,
-      relativeStart + remainingSlots,
-    );
-
-    // Dedup against Promos (Ensure we don't show a promo item again as a discount item)
-    const deduped = neededDiscounts.filter((p) => !promoProductIds.has(p.id));
-    dataList = [...dataList, ...deduped];
-  }
-
-  const enriched = await enrichProductsWithLabels(dataList);
-  return { total, dataList: enriched };
+  const enriched = await enrichProductsWithLabels(result.dataList);
+  return { ...result, dataList: enriched };
 };
 
 /**

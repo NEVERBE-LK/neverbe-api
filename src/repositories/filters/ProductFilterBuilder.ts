@@ -1,5 +1,5 @@
 import { FirestoreQueryBuilder } from "../utils/FirestoreQueryBuilder";
-import type { ProductFilterOptions } from "@/services/ProductService";
+import type { ProductFilterOptions } from "../ProductRepository";
 
 /**
  * ProductFilterBuilder
@@ -19,15 +19,26 @@ export class ProductFilterBuilder {
    * Apply all optimized DB filters
    */
   applyOptimizedFilters(): ProductFilterBuilder {
-    const { tags, gender, inStock, orderBy, orderDirection } = this.options;
+    const { tags = [], gender, inStock, category, brand, orderBy, orderDirection } =
+      this.options;
 
-    // 1. Tags Logic (Array-Contains-Any)
+    // 1. Unified Search Tags (Case-Insensitive)
+    // Merge category and brand into tags for broader, case-insensitive discovery
+    const searchTags = [...tags];
+    if (category) searchTags.push(category.toLowerCase());
+    if (brand) searchTags.push(brand.toLowerCase());
+
     // Firestore allows only ONE array-contains/any clause.
-    // 'tags' take priority over 'gender' for DB filtering because tags usually filter down more.
-    if (tags && tags.length > 0) {
-      this.builder.where("tags", "array-contains-any", tags);
+    if (searchTags.length > 0) {
+      // Use array-contains if single, array-contains-any if multiple
+      if (searchTags.length === 1) {
+        this.builder.where("tags", "array-contains", searchTags[0]);
+      } else {
+        // Limit to 10 for Firestore constraints
+        this.builder.where("tags", "array-contains-any", searchTags.slice(0, 10));
+      }
     }
-    // If no tags, we can offload gender filtering to DB
+    // If no tags/category/brand, we can offload gender filtering to DB
     else if (gender) {
       this.builder.where("gender", "array-contains", gender);
     }
