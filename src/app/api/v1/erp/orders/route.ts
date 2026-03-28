@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeRequest } from "@/services/AuthService";
 import { addOrder, getOrders } from "@/services/OrderService";
-import { authorizeOrderRequest } from "@/services/AuthService";
+import { getAuthUid } from "@/services/AuthService";
 import { Order } from "@/model/Order";
 import { errorResponse } from "@/utils/apiResponse";
 
@@ -47,8 +47,8 @@ export const GET = async (req: NextRequest) => {
 
 export const POST = async (req: NextRequest) => {
   try {
-    const authorization = await authorizeOrderRequest(req);
-    if (!authorization) return errorResponse("Unauthorized", 401);
+    const uid = await getAuthUid(req);
+    if (!uid) return errorResponse("Unauthorized", 401);
 
     const formData = await req.formData();
     const dataString = formData.get("data") as string;
