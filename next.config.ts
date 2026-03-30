@@ -8,7 +8,6 @@ const nextConfig: NextConfig = {
     // !! WARN !!
     ignoreBuildErrors: true,
   },
-  serverExternalPackages: ["@tensorflow/tfjs-node", "@mapbox/node-pre-gyp"],
   reactCompiler: true,
   async headers() {
     return [
