@@ -142,11 +142,10 @@ export const getHistoricalSales = async (days?: number): Promise<HistoricalPoint
     .collection(COLLECTION_ORDERS)
     .where("paymentStatus", "==", "Paid");
 
-  if (days && days > 0) {
-    const start = new Date();
-    start.setDate(start.getDate() - days);
-    query = query.where("createdAt", ">=", Timestamp.fromDate(start));
-  }
+  const lookback = days && days > 0 ? days : 365;
+  const start = new Date();
+  start.setDate(start.getDate() - lookback);
+  query = query.where("createdAt", ">=", Timestamp.fromDate(start));
   
   const snap = await query.orderBy("createdAt", "asc").get();
 
@@ -158,4 +157,59 @@ export const getHistoricalSales = async (days?: number): Promise<HistoricalPoint
   });
 
   return Object.entries(dailyMap).map(([date, netSales]) => ({ date, netSales }));
+};
+export const getNeuralStockRisks = async (daysToForecast = 14) => {
+  const inventorySnap = await admin.firestore()
+    .collection(COLLECTION_INVENTORY)
+    .where("quantity", ">", 0)
+    .get();
+
+  const productIds = inventorySnap.docs.map(d => d.data().productId);
+  const productsSnap = await Promise.all(
+    productIds.map(id => admin.firestore().collection(COLLECTION_PRODUCTS).doc(id).get())
+  );
+  
+  const productInfo = new Map(productsSnap.map(d => [d.id, d.data()]));
+
+  // Calculate 30-day velocity for each product
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  
+  const ordersSnap = await admin.firestore()
+    .collection(COLLECTION_ORDERS)
+    .where("paymentStatus", "==", "Paid")
+    .where("createdAt", ">=", Timestamp.fromDate(thirtyDaysAgo))
+    .get();
+
+  const velocityMap: Record<string, number> = {};
+  ordersSnap.docs.forEach(doc => {
+    const order = doc.data();
+    if (order.items) {
+      order.items.forEach((item: any) => {
+        velocityMap[item.itemId] = (velocityMap[item.itemId] || 0) + (item.quantity / 30);
+      });
+    }
+  });
+
+  const risks: any[] = [];
+  inventorySnap.docs.forEach(doc => {
+    const data = doc.data();
+    const velocity = velocityMap[data.productId] || 0;
+    const currentStock = data.quantity || 0;
+    const projectedDemand = velocity * daysToForecast;
+
+    if (velocity > 0 && currentStock < projectedDemand) {
+      const pData = productInfo.get(data.productId);
+      risks.push({
+        productId: data.productId,
+        name: pData?.name || "Unknown Product",
+        currentStock,
+        projectedDemand: Math.ceil(projectedDemand),
+        riskLevel: currentStock < (projectedDemand / 2) ? "CRITICAL" : "HIGH",
+        daysRemaining: Math.floor(currentStock / velocity)
+      });
+    }
+  });
+
+  return risks.sort((a, b) => a.daysRemaining - b.daysRemaining).slice(0, 10);
 };
