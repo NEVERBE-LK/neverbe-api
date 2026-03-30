@@ -105,7 +105,7 @@ export const getFinanceDashboardData =
 
       // Expense Breakdown
       // Assign colors dynamically or fixed
-      const colors = ["#000000", "#333333", "#666666", "#999999", "#CCCCCC"];
+      const colors = ["#16a34a", "#10b981", "#34d399", "#059669", "#047857"];
       const expenseBreakdown = Object.entries(categoryMap)
         .map(([category, amount], index) => ({
           category,
