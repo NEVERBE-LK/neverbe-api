@@ -18,7 +18,7 @@ import {
 } from "./DashboardService";
 
 let genAIInstance: GoogleGenerativeAI | null = null;
-const getGenAI = () => {
+export const getGenAI = () => {
   if (!genAIInstance) {
     const key = process.env.GEMINI_API_KEY;
     if (!key)
