@@ -265,6 +265,7 @@ export const analyzeNeuralStockRisks = (ctx: NeuralContext, daysToForecast = 14)
       risks.push({
         productId: item.productId,
         name: pData?.name || item.name || "Unknown Product",
+        imageUrl: pData?.imageUrl || item.image || null,
         quantity: item.quantity,
         velocity,
         daysRemaining,
@@ -276,6 +277,7 @@ export const analyzeNeuralStockRisks = (ctx: NeuralContext, daysToForecast = 14)
       risks.push({
         productId: item.productId,
         name: pData?.name || item.name || "Unknown Product",
+        imageUrl: pData?.imageUrl || item.image || null,
         quantity: item.quantity,
         velocity: 0,
         daysRemaining: 0,

@@ -93,7 +93,13 @@ export const updateNeuralCoreFeed = async (forceRefresh: boolean = false) => {
     }
     if (neuralRisks.length > 0) {
       neuralRisks.forEach(risk => {
-        interventions.push({ type: "INVENTORY", priority: risk.riskLevel, title: `Neural Stock Out: ${risk.name}`, desc: `Predicted depletion in ${risk.daysRemaining} days.` });
+        interventions.push({ 
+          type: "INVENTORY", 
+          priority: risk.riskLevel, 
+          title: `Neural Stock Out: ${risk.name}`, 
+          desc: `Predicted depletion in ${risk.daysRemaining} days.`,
+          imageUrl: risk.imageUrl || null
+        });
       });
     }
     if (customerRetention.length > 0) {
