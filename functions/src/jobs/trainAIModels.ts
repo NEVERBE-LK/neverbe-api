@@ -2,6 +2,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { updateHybridIntelligence } from "../services/HybridIntelligenceService";
 import * as logger from "firebase-functions/logger";
+import * as admin from "firebase-admin";
 
 export const trainAIModels = onSchedule({
   schedule: "every 60 minutes",
@@ -33,9 +34,26 @@ export const triggerManualTraining = onCall({
 
   try {
     const result = await updateHybridIntelligence();
+    
+    // Send background notification to all admins via topic
+    const messaging = admin.messaging();
+    await messaging.send({
+      topic: "admin-notifications",
+      notification: {
+        title: "Neural Engine Updated",
+        body: "The manual training job completed successfully. Dashboard insights have been refreshed.",
+      },
+      data: {
+        type: "NEURAL_UPDATE",
+        generatedAt: result.data.generatedAt
+      },
+      android: { priority: "high" },
+      apns: { payload: { aps: { sound: "default" } } }
+    });
+
     return {
       success: true,
-      message: "Neural training completed successfully.",
+      message: "Neural training started. You will receive a notification when complete.",
       generatedAt: result.data.generatedAt
     };
   } catch (error: any) {
