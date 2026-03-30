@@ -111,6 +111,7 @@ export const getPettyCashList = async (
     search?: string;
     fromDate?: string;
     toDate?: string;
+    stockId?: string;
   },
 ): Promise<{ data: PettyCash[]; total: number }> => {
   let query: FirebaseFirestore.Query = adminFirestore
@@ -126,6 +127,9 @@ export const getPettyCashList = async (
   }
   if (filters?.category && filters.category !== "ALL") {
     query = query.where("category", "==", filters.category);
+  }
+  if (filters?.stockId) {
+    query = query.where("stockId", "==", filters.stockId);
   }
 
   const snapshot = await query.get();

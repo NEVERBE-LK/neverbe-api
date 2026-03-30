@@ -26,4 +26,5 @@ export interface PettyCash {
   reviewedAt: Timestamp | string | null;
 
   isDeleted: boolean;
+  stockId?: string;
 }
