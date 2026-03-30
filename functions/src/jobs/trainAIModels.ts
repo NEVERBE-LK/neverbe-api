@@ -21,7 +21,7 @@ export const trainAIModels = onSchedule({
  * Manual trigger for ERP administrators
  */
 export const triggerManualTraining = onCall({
-  memory: "1GiB",
+  memory: "4GiB",
   timeoutSeconds: 300
 }, async (request) => {
   // 1. Basic authentication check

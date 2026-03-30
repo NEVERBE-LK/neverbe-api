@@ -28,7 +28,10 @@ export * from "./jobs/trainAIModels";
 // functions should each use functions.runWith({ maxInstances: 10 }) instead.
 // In the v1 API, each function can only serve one request per container, so
 // this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+setGlobalOptions({ 
+  maxInstances: 10,
+  concurrency: 1 // Keep low for ML/TensorFlow memory safety
+});
 
 // export const helloWorld = onRequest((request, response) => {
 //   logger.info("Hello logs!", {structuredData: true});

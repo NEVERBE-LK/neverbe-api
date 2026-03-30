@@ -59,7 +59,7 @@ export const updateHybridIntelligence = async () => {
     if (!strategicAdvisory && tfResult.success) {
       console.log("[HybridIntelligenceJob] Calling Gemini for new strategic insights...");
       const model = getGenAI().getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.0-flash",
         systemInstruction: "You are a Senior AI Business Consultant for an ERP system. Your task is to analyze a Neural Network's numerical forecast and provide strategic advisory."
       });
 
