@@ -4,12 +4,10 @@ import { generateSalesForecast } from "./TFService";
 import {
   getDailySnapshot,
   getMonthlyComparison,
-  getLowStockRisks,
-  getPopularItems,
   getHistoricalSales,
-  getNeuralStockRisks,
-  getFinanceSnapshot,
-  getNeuralPromotionStrategy
+  getNeuralRawContext,
+  analyzeNeuralStockRisks,
+  analyzeNeuralPromoStrategy
 } from "./DataService";
 
 const CACHE_COLLECTION = "dashboard_cache";
@@ -19,7 +17,7 @@ const SETTINGS_KEY = "neural_config";
 
 export const updateNeuralCoreFeed = async () => {
   const startTime = Date.now();
-  console.log("[NeuralCore] Orchestrating global analysis...");
+  console.log("[NeuralCore] Orchestrating global analysis (Unified Mode)...");
 
   try {
     // 0. Fetch Dynamic Neural Configuration
@@ -30,108 +28,75 @@ export const updateNeuralCoreFeed = async () => {
       weightingMode: 'BALANCED'
     };
 
-    // 1. Data Aggregation (Reality, Risks, Finance & Promotions)
-    const [historical, snapshot, comparison, lowStock, popular, neuralRisks, finance, promoSuggestions] = await Promise.all([
+    // 1. Unified Raw Data Gathering (The Speed Optimization)
+    const [historical, snapshot, comparison, ctx] = await Promise.all([
       getHistoricalSales(config.historicalRunway || 120),
       getDailySnapshot(),
       getMonthlyComparison(),
-      getLowStockRisks(15),
-      getPopularItems(10),
-      getNeuralStockRisks(config.forecastWindow || 14),
-      getFinanceSnapshot(),
-      getNeuralPromotionStrategy()
+      getNeuralRawContext()
     ]);
 
-    // 2. Neural Projection (Future)
+    // 2. Optimized Neural Analyzers (Context-Shared)
+    const neuralRisks = analyzeNeuralStockRisks(ctx, config.forecastWindow || 14);
+    const promoSuggestions = analyzeNeuralPromoStrategy(ctx);
+    
+    // 3. Neural Projection (Future)
     const tfResult = await generateSalesForecast(config.forecastWindow || 14, historical);
     
-    // 3. Global Health Calculation (Weighted Scoping)
+    // 4. Global Health Calculation (Refined Logic)
     const salesVelocity = comparison.percentageChange.revenue;
-    const inventoryRisk = lowStock.length > 5 ? Math.max(0, 100 - (lowStock.length * 5)) : 100;
+    const inventoryRisk = Math.max(0, 100 - (neuralRisks.length * 10)); // 10% penalty per critical risk
     const profitStability = comparison.currentMonth.profit > 0 ? 100 : 50;
 
-    // Financial Resilience Score
+    // Financial Resilience Score (Refined Linear Scaling)
     const dailyRev = (tfResult as any).success ? (tfResult as any).avgForecastedDaily : (comparison.currentMonth.revenue / 30);
     const projectedRevenue = dailyRev * (config.forecastWindow || 14);
-    const projectedExpenses = finance.dailyExpenseVelocity * (config.forecastWindow || 14);
-    const totalOutflow = finance.totalPayable + projectedExpenses;
-    const totalInflow = finance.totalBalance + projectedRevenue;
+    const projectedExpenses = ctx.finance.dailyExpenseVelocity * (config.forecastWindow || 14);
+    const totalOutflow = ctx.finance.totalPayable + projectedExpenses;
+    const totalInflow = ctx.finance.totalBalance + projectedRevenue;
 
-    const financialResilience = Math.min(100, Math.round((totalInflow / (totalOutflow || 1)) * 50));
+    // Standard Resilience Score (If Inflow covers 1.5x Outflow, Score is 100)
+    const financialResilience = Math.min(100, Math.round((totalInflow / (totalOutflow || 1)) * 66));
     
     // Applying Weighting Mode
     let wTrends = 0.4, wStock = 0.3, wProfit = 0.3;
-    
-    if (config.weightingMode === 'GROWTH') {
-      wTrends = 0.6; wStock = 0.2; wProfit = 0.2;
-    } else if (config.weightingMode === 'STABILITY') {
-      wTrends = 0.2; wStock = 0.2; wProfit = 0.6;
-    } else if (config.weightingMode === 'INVENTORY') {
-      wTrends = 0.2; wStock = 0.6; wProfit = 0.2;
-    }
+    if (config.weightingMode === 'GROWTH') { wTrends = 0.6; wStock = 0.2; wProfit = 0.2; }
+    else if (config.weightingMode === 'STABILITY') { wTrends = 0.2; wStock = 0.2; wProfit = 0.6; }
+    else if (config.weightingMode === 'INVENTORY') { wTrends = 0.2; wStock = 0.6; wProfit = 0.2; }
     
     const healthScore = Math.round(
-      ((salesVelocity > 0 ? 100 : 50) * wTrends) + 
+      ((salesVelocity > -5 ? 100 : 50) * wTrends) + 
       (inventoryRisk * wStock) +         
       (profitStability * wProfit)         
     );
 
-    // 4. Autonomous Interventions (ML Decision Logic)
+    // 5. Autonomous Interventions
     const interventions: any[] = [];
-    
     if (salesVelocity < -20) {
-      interventions.push({
-        type: "REVENUE",
-        priority: "CRITICAL",
-        title: "Vigorous Revenue Drift",
-        desc: `Sales are down ${Math.abs(salesVelocity)}% vs last month. Immediate promotion advised.`
-      });
+      interventions.push({ type: "REVENUE", priority: "CRITICAL", title: "Vigorous Revenue Drift", desc: "Sales momentum is trailing last month significantly." });
     }
-
     if (financialResilience < 40) {
-      interventions.push({
-        type: "FINANCE",
-        priority: "CRITICAL",
-        title: "Liquidity Constraint Predicted",
-        desc: `Projected inflow won't cover upcoming payables and expenses.`
-      });
+      interventions.push({ type: "FINANCE", priority: "CRITICAL", title: "Liquidity Constraint", desc: `${Math.round(financialResilience)}% Resilience. Cashflow needs optimization.` });
     }
-
     if (neuralRisks.length > 0) {
       neuralRisks.forEach(risk => {
-        interventions.push({
-          type: "INVENTORY",
-          priority: risk.riskLevel,
-          title: `Neural Stock Out: ${risk.name}`,
-          desc: `Current stock (${risk.currentStock}) won't survive the next demand spike.`
-        });
+        interventions.push({ type: "INVENTORY", priority: risk.riskLevel, title: `Neural Stock Out: ${risk.name}`, desc: `Predicted depletion in ${risk.daysRemaining} days.` });
       });
     }
 
-    // 5. Automated Proactive Notifications (6h Anti-Spam)
-    // [Implementation omitted for brevity, same logic as before]
-
-    // 6. Strategic Briefing (Optimized Hybrid Layer)
+    // 6. Strategic Briefing (Gemini Optimized @ 4h Cache)
     let briefing = "";
     
-    // A. Heuristic Narrator (ML-Based Fallback to save Gemini tokens)
     const generateHeuristicBriefing = (hs: number, iv: any[]) => {
-      if (hs >= 90 && iv.length === 0) {
-        return "All systems optimal. Revenue and inventory health are in the growth quadrant. No corrective actions required.";
-      }
-      if (hs >= 80 && iv.every(i => i.priority !== 'CRITICAL')) {
-        return "System stability is high. Global momentum remains positive despite minor inventory drifts.";
-      }
-      return null; // Trigger Gemini if anomalous
+      if (hs >= 90 && iv.length === 0) return "Systems optimal. Catalog velocity and liquidity metrics are in a growth quadrant.";
+      if (hs >= 80 && iv.every(i => i.priority !== 'CRITICAL')) return "Stability high. System is absorbing minor demand drifts effectively.";
+      return null;
     };
 
     const heuristic = generateHeuristicBriefing(healthScore, interventions);
-    
     if (heuristic) {
       briefing = heuristic;
-      console.log("[NeuralCore] Gemini call bypassed. Using Heuristic Narrator.");
     } else {
-      // B. Intelligent Narrator (Gemini) - Only if anomalous, with 4h Cache checks
       const cacheDoc = await admin.firestore().collection(CACHE_COLLECTION).doc(CACHE_KEY).get();
       const cachedBriefing = cacheDoc.data()?.data?.briefing;
       const lastLLMTime = cacheDoc.data()?.lastLLMUpdateTime?.toDate() || new Date(0);
@@ -139,24 +104,15 @@ export const updateNeuralCoreFeed = async () => {
 
       if (hoursSinceLLM < 4 && cachedBriefing) {
         briefing = cachedBriefing;
-        console.log("[NeuralCore] Gemini call bypassed. Using Cached Context (4h Window).");
       } else {
         try {
-          const model = getGenAI().getGenerativeModel({ 
-            model: "gemini-2.0-flash",
-            systemInstruction: "You are the Neural Core. Provide a 2-sentence strategic summary."
-          });
-          const prompt = `DATA: Health ${healthScore}, Sales Drift ${salesVelocity}%, Risks ${neuralRisks.length}. Resilience ${financialResilience}%`;
+          const model = getGenAI().getGenerativeModel({ model: "gemini-2.0-flash", systemInstruction: "Provide a 2-sentence summary." });
+          const prompt = `Health ${healthScore}, Sales Drift ${salesVelocity}%, Risks ${neuralRisks.length}. Resilience ${financialResilience}%`;
           const result = await model.generateContent(prompt);
           briefing = result.response.text();
-          
-          await admin.firestore().collection(CACHE_COLLECTION).doc(CACHE_KEY).update({
-            lastLLMUpdateTime: admin.firestore.FieldValue.serverTimestamp()
-          });
-          console.log("[NeuralCore] Gemini API successfully generated strategic briefing.");
-        } catch (llmErr) {
-          console.error("[NeuralCore] Gemini API failed", llmErr);
-          briefing = "Neural optimization in progress. Analyzing systemic drifts.";
+          await admin.firestore().collection(CACHE_COLLECTION).doc(CACHE_KEY).update({ lastLLMUpdateTime: admin.firestore.FieldValue.serverTimestamp() });
+        } catch {
+          briefing = "Neural optimization in progress.";
         }
       }
     }
@@ -169,23 +125,19 @@ export const updateNeuralCoreFeed = async () => {
       reality: {
         snapshot,
         comparison,
-        lowStock,
-        popular,
+        popular: [], // Placeholder for backward compatibility
         neuralRisks,
-        finance,
+        finance: ctx.finance,
         promoSuggestions
       },
       projections: tfResult,
       generatedAt: new Date().toISOString()
     };
 
-    await admin.firestore()
-      .collection(CACHE_COLLECTION)
-      .doc(CACHE_KEY)
-      .set({
-        data: finalFeed,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
+    await admin.firestore().collection(CACHE_COLLECTION).doc(CACHE_KEY).set({
+      data: finalFeed,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
 
     console.log(`[NeuralCore] Synchronization stable in ${Date.now() - startTime}ms`);
     return { success: true, data: finalFeed };

@@ -4,9 +4,9 @@ import { generateSalesForecast } from "./TFService";
 import {
   getDailySnapshot,
   getMonthlyComparison,
-  getLowStockRisks,
-  getPopularItems,
-  getHistoricalSales
+  getHistoricalSales,
+  getNeuralRawContext,
+  analyzeNeuralStockRisks
 } from "./DataService";
 import dayjs from "dayjs";
 
@@ -15,18 +15,18 @@ const CACHE_KEY = "hybrid_intelligence_full";
 
 export const updateHybridIntelligence = async () => {
   const startTime = Date.now();
-  console.log("[HybridIntelligenceJob] Starting neural training and analysis...");
+  console.log("[HybridIntelligenceJob] Starting neural training and analysis (Optimized)...");
   try {
-    // 1. All Data: Fetch entire historical window for deeper neural context
-    const historical = await getHistoricalSales();
-    const tfResult = await generateSalesForecast(14, historical);
-
-    const [snapshot, comparison, lowStock, popular] = await Promise.all([
+    // 1. Unified Data Gathering
+    const [historical, snapshot, comparison, ctx] = await Promise.all([
+      getHistoricalSales(),
       getDailySnapshot(),
       getMonthlyComparison(),
-      getLowStockRisks(10),
-      getPopularItems(5)
+      getNeuralRawContext()
     ]);
+
+    const tfResult = await generateSalesForecast(14, historical);
+    const lowStockRisks = analyzeNeuralStockRisks(ctx, 14);
 
     // 2. Gemini Optimization: Reuse previous advisory if it's less than 24 hours old
     let strategicAdvisory = "";
@@ -44,43 +44,24 @@ export const updateHybridIntelligence = async () => {
           const updatedAt = prevData.updatedAt.toDate();
           const now = new Date();
 
-          // If the advisory was generated in the last 24 hours, reuse it
           if (now.getTime() - updatedAt.getTime() < 24 * 60 * 60 * 1000) {
             strategicAdvisory = prevData.data.advisory;
             isAdvisoryFromCache = true;
-            console.log("[HybridIntelligenceJob] Reusing cached Gemini advisory (within 24h window).");
           }
         }
       }
     } catch (cacheErr) {
-      console.warn("[HybridIntelligenceJob] Failed to read previous cache, will call Gemini.", cacheErr);
+      console.warn("[HybridIntelligenceJob] Failed to read previous cache.", cacheErr);
     }
 
     if (!strategicAdvisory && tfResult.success) {
       console.log("[HybridIntelligenceJob] Calling Gemini for new strategic insights...");
       const model = getGenAI().getGenerativeModel({
-        model: "gemini-2.5-flash",
-        systemInstruction: "You are a Senior AI Business Consultant for an ERP system. Your task is to analyze a Neural Network's numerical forecast and provide strategic advisory."
+        model: "gemini-2.0-flash",
+        systemInstruction: "Senior AI Business Consultant analyze Neural Network's numerical forecast and provide strategic advisory."
       });
 
-      const prompt = `
-        HISTORICAL & NEURAL FORECAST DATA:
-        ${JSON.stringify((tfResult as any).predictions.filter((p: any) => p.isForecast), null, 2)}
-
-        CURRENT BUSINESS CONTEXT:
-        - Today's Revenue: Rs. ${snapshot.totalNetSales}
-        - Monthly Revenue Change: ${comparison.percentageChange.revenue}%
-        - Low Stock Alerts: ${lowStock.length} items at risk.
-        - Top Sellers: ${popular.map(i => i.name).join(", ")}
-
-        TASK:
-        Provide a concise (3-4 sentences) strategic advisory. 
-        1. Explain the "Why" behind the neural forecast (e.g., trend patterns).
-        2. Give one specific actionable advice (e.g., restock, promotion).
-        3. Mention the predicted trend for the next 7 days.
-        4. Do NOT use generic pleasantries. Be professional and data-driven.
-      `;
-
+      const prompt = `DATA: Revenue ${snapshot.totalNetSales}, Change ${comparison.percentageChange.revenue}%, Risks ${lowStockRisks.length}. Trend ${tfResult.success ? 'Projected GROWTH' : 'STABLE'}`;
       const result = await model.generateContent(prompt);
       strategicAdvisory = result.response.text();
     }
@@ -89,13 +70,12 @@ export const updateHybridIntelligence = async () => {
       success: true,
       data: {
         forecast: tfResult,
-        advisory: strategicAdvisory || "Neural models are currently analyzing your trajectory.",
+        advisory: strategicAdvisory || "Neural models are analyzing your trajectory.",
         generatedAt: new Date().toISOString(),
         isAdvisoryFromCache
       }
     };
 
-    // Update Firestore Cache directly
     await admin.firestore()
       .collection(CACHE_COLLECTION)
       .doc(CACHE_KEY)
@@ -103,74 +83,43 @@ export const updateHybridIntelligence = async () => {
         data: finalResult.data,
         expiry: admin.firestore.Timestamp.fromDate(dayjs().add(24, 'hours').toDate()),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
 
     console.log(`[HybridIntelligenceJob] Completed in ${Date.now() - startTime}ms`);
 
-    // 3. Automated Low Stock Notifications (with Anti-Spam Cooldown)
-    if (lowStock.length > 0) {
+    // 3. Automated Low Stock Notifications
+    if (lowStockRisks.length > 0) {
       try {
         const cacheDoc = await admin.firestore().collection(CACHE_COLLECTION).doc(CACHE_KEY).get();
         const cacheData = cacheDoc.data();
-        
-        const lastCount = cacheData?.lastLowStockAlertCount || 0;
         const lastTime = cacheData?.lastLowStockAlertTime?.toDate() || new Date(0);
         const hoursSinceLast = (Date.now() - lastTime.getTime()) / (1000 * 60 * 60);
 
-        // Only send if count changed OR 12 hours have passed
-        if (lowStock.length !== lastCount || hoursSinceLast >= 12) {
-          const itemNames = lowStock.slice(0, 3).map(i => i.name).join(", ");
-          const moreSuffix = lowStock.length > 3 ? ` and ${lowStock.length - 3} others` : "";
-          
-          const docId = `STOCK_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        if (hoursSinceLast >= 12) {
+          const itemNames = lowStockRisks.slice(0, 3).map((i: any) => i.name).join(", ");
+          const docId = `STOCK_HYBRID_${Date.now()}`;
           const notification = {
-            type: "STOCK",
-            title: "Inventory Alert: Low Stock",
-            message: `The following items are running low: ${itemNames}${moreSuffix}. Check your stock levels immediately.`,
-            metadata: { 
-              itemCount: lowStock.length,
-              itemNames: lowStock.map(i => i.name)
-            },
+            type: "AI_STOCK",
+            title: "Neural Core: Stock Alerts",
+            message: `Neural analysis identifies ${lowStockRisks.length} items at risk: ${itemNames}...`,
             read: false,
-            createdAt: new Date()
+            createdAt: new Date(),
+            metadata: { priority: "HIGH" }
           };
           
           await admin.firestore().collection("erp_notifications").doc(docId).set(notification);
-
-          // Update Cache with last alert info
           await admin.firestore().collection(CACHE_COLLECTION).doc(CACHE_KEY).update({
-            lastLowStockAlertCount: lowStock.length,
             lastLowStockAlertTime: admin.firestore.FieldValue.serverTimestamp()
           });
-
-          // Send Push
-          const messaging = admin.messaging();
-          await messaging.send({
-            topic: "admin_alerts",
-            notification: {
-              title: notification.title,
-              body: notification.message
-            },
-            data: {
-              type: "STOCK",
-              click_action: "FLUTTER_NOTIFICATION_CLICK"
-            },
-            webpush: {
-              fcmOptions: { link: "/inventory" }
-            }
-          });
           
-          console.log(`[HybridIntelligenceJob] Sent low stock alert for ${lowStock.length} items.`);
-        } else {
-          console.log(`[HybridIntelligenceJob] Skipping low stock alert (Cooldown active, Count unchanged: ${lowStock.length}).`);
+          console.log(`[HybridIntelligenceJob] Sent low stock alert for ${lowStockRisks.length} items.`);
         }
       } catch (notifyErr) {
-        console.error("[HybridIntelligenceJob] Failed to handle low stock notification", notifyErr);
+        console.error("[HybridIntelligenceJob] Notification failed", notifyErr);
       }
     }
 
     return finalResult;
-
   } catch (error) {
     console.error("[HybridIntelligenceJob] Fatal Error:", error);
     throw error;
