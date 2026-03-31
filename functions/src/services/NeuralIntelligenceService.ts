@@ -93,13 +93,16 @@ export const updateNeuralCoreFeed = async (forceRefresh: boolean = false) => {
     }
     if (neuralRisks.length > 0) {
       neuralRisks.forEach(risk => {
-        interventions.push({ 
-          type: "INVENTORY", 
-          priority: risk.riskLevel, 
-          title: `Neural Stock Out: ${risk.name}`, 
+        const productDetail = ctx.productMap.get(risk.productId);
+        interventions.push({
+          type: "INVENTORY",
+          priority: risk.riskLevel || "CRITICAL",
+          title: `Neural Stock Out: ${risk.name}`,
           desc: risk.isOutOfStock 
             ? "Product is currently OUT OF STOCK." 
             : `Predicted depletion in ${risk.daysRemaining} days (AI Scaled Velocity).`,
+          productId: risk.productId,
+          sku: productDetail?.sku || "N/A",
           imageUrl: risk.imageUrl || null
         });
       });
