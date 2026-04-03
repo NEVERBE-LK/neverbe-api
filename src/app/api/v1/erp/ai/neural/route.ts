@@ -1,23 +1,21 @@
 import { NextResponse } from 'next/server';
-import { getCache } from '@/services/CacheService';
+import * as NeuralHubService from '@/services/NeuralHubService';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const refresh = searchParams.get('refresh') === 'true';
 
   try {
-    // 1. Unified Neural Core strictly reads from the synchronized Cloud Cache
-    // Training is handled by background Cloud Functions for performance.
-    const cached = await getCache("neural_core_feed");
-    
-    if (cached) {
-      return NextResponse.json({ success: true, data: cached });
+    // 1. If refresh is requested, signal background synchronization
+    if (refresh) {
+       console.log("[NeuralREST] Triggering Neural Force Sync (Cloud Functions Integration)");
+       await NeuralHubService.forceSyncNeuralCore();
     }
 
-    return NextResponse.json({ 
-      success: false, 
-      message: "Neural Core is currently synchronizing global metrics. Please check back in a moment." 
-    }, { status: 404 });
+    // 2. Return pre-calculated feed from Firestore (synced with Background Jobs)
+    const feed = await NeuralHubService.getNeuralFeed();
+
+    return NextResponse.json(feed);
 
   } catch (error: any) {
     console.error("[NeuralREST] Read error:", error);

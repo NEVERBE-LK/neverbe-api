@@ -64,7 +64,7 @@ export const updateNeuralCoreFeed = async (forceRefresh: boolean = false) => {
     // 1. Fetch Dynamic Neural Configuration
     const settingsDoc = await admin.firestore().collection(SETTINGS_COLLECTION).doc(SETTINGS_KEY).get();
     const config = settingsDoc.data() || {
-      historicalRunway: 365,
+      historicalRunway: 1095, // 3 Years (365 * 3)
       forecastWindow: 14,
       weightingMode: 'BALANCED'
     };
@@ -134,7 +134,7 @@ export const updateNeuralCoreFeed = async (forceRefresh: boolean = false) => {
           title: invTitle,
           desc: invDesc,
           productId: risk.productId,
-          sku: productDetail?.sku || "N/A",
+          sku: productDetail?.sku || risk.productId || "N/A",
           imageUrl: risk.imageUrl || null
         });
 
