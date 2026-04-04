@@ -172,19 +172,41 @@ export const getCategoriesForDropdown = async () => {
 };
 export const getFeaturedCategories = async () => {
   try {
-    const snapshot = await adminFirestore
+    const featuredSnapshot = await adminFirestore
       .collection(COLLECTION)
       .where("isDeleted", "==", false)
       .where("active", "==", true)
       .where("isFeatured", "==", true)
       .get();
 
-    return snapshot.docs.map((doc) => ({
+    let categories = featuredSnapshot.docs.map((doc) => ({
       id: doc.id,
       ...(doc.data() as Category),
     }));
+
+    // Dynamic Fallback: If no featured categories, fetch all active and pick 8 random ones
+    if (categories.length === 0) {
+      const allActiveSnapshot = await adminFirestore
+        .collection(COLLECTION)
+        .where("isDeleted", "==", false)
+        .where("active", "==", true)
+        .get();
+      
+      const allActive = allActiveSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...(doc.data() as Category),
+      }));
+
+      // In-memory shuffle for simplicity (assuming manageable number of categories)
+      categories = allActive
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 8);
+    }
+
+    return categories;
   } catch (error) {
     console.error("Get Featured Categories Error:", error);
     return [];
   }
 };
+
