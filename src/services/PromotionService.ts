@@ -853,141 +853,92 @@ export const calculateCartDiscount = async (
     }
 
     // Condition Checks
-    let conditionsMet = true;
+    // Identify categorized conditions
+    const productConditions = promo.conditions?.filter((c: any) => c.type === "SPECIFIC_PRODUCT") || [];
+    const nonProductConditions = promo.conditions?.filter((c: any) => c.type !== "SPECIFIC_PRODUCT") || [];
 
-    // Collect all SPECIFIC_PRODUCT values into one array for easier checking (Frontend parity)
-    const specificProductIds: string[] = [];
-    if (promo.conditions) {
-      promo.conditions.forEach((condition: any) => {
-        if (condition.type === "SPECIFIC_PRODUCT") {
-          if (condition.value) specificProductIds.push(condition.value);
-          if (condition.productIds)
-            specificProductIds.push(...condition.productIds);
-        }
+    // 1. Check Product Conditions (Pool logic: if ANY of these conditions are met, product targeting is OK)
+    // If there are NO specific product conditions, this requirement is trivially met.
+    let productConditionMet = productConditions.length === 0;
+
+    if (!productConditionMet) {
+      // Aggregate all simple product IDs for OR check
+      const aggregateProductIds = productConditions
+        .filter(c => c.variantMode !== "SPECIFIC_VARIANTS")
+        .flatMap(c => c.value ? [c.value] : (c.productIds || []));
+
+      const hasSimpleProductMatch = cartItems.some(item => aggregateProductIds.includes(item.productId));
+      
+      // Check strict variant-level conditions
+      const variantConditions = productConditions.filter(c => c.variantMode === "SPECIFIC_VARIANTS");
+      const hasVariantMatch = variantConditions.some(cond => {
+        const productIds = cond.productIds || [cond.value];
+        return cartItems.some(item => 
+          productIds.includes(item.productId) && 
+          item.variantId && 
+          cond.variantIds?.includes(item.variantId)
+        );
       });
+
+      productConditionMet = hasSimpleProductMatch || hasVariantMatch;
     }
 
-    if (promo.conditions) {
-      for (const condition of promo.conditions) {
-        if (condition.type === "MIN_AMOUNT") {
-          if (cartTotal < Number(condition.value)) {
-            console.log(
-              `[PromotionService] Condition Failed ${promo.id}: MIN_AMOUNT ${cartTotal} < ${condition.value}`,
-            );
-            conditionsMet = false;
-          }
-        } else if (condition.type === "MIN_QUANTITY") {
-          // Collect specific product conditions with variant awareness
-          const productConditions = promo.conditions?.filter((c: any) => c.type === "SPECIFIC_PRODUCT") || [];
+    if (!productConditionMet) {
+      console.log(`[PromotionService] Skipped ${promo.id}: None of the required products/variants are in the cart`);
+      continue;
+    }
 
-          let applicableItems = cartItems;
-          if (productConditions.length > 0) {
-            applicableItems = cartItems.filter((item) => {
-              return productConditions.some((pc: any) => {
-                const productId = pc.value || (pc.productIds && pc.productIds[0]);
-                if (item.productId !== productId) return false;
-
-                if (pc.variantMode === "SPECIFIC_VARIANTS" && pc.variantIds) {
-                  return item.variantId && pc.variantIds.includes(item.variantId);
-                }
-                return true;
-              });
-            });
-          }
-
-          const totalQty = applicableItems.reduce(
-            (sum, item) => sum + item.quantity,
-            0,
-          );
-          if (totalQty < Number(condition.value)) {
-            console.log(
-              `[PromotionService] Condition Failed ${promo.id}: MIN_QUANTITY ${totalQty} < ${condition.value}`,
-            );
-            conditionsMet = false;
-          }
-        } else if (condition.type === "SPECIFIC_PRODUCT") {
-          // Check variant restrictions if defined
-          if (
-            condition.variantMode === "SPECIFIC_VARIANTS" &&
-            condition.variantIds
-          ) {
-            const productId = condition.value as string;
-            const productIds = condition.productIds || [productId];
-
-            const hasMatchingVariant = cartItems.some(
-              (item) =>
-                productIds.includes(item.productId) &&
-                item.variantId &&
-                condition.variantIds!.includes(item.variantId),
-            );
-            if (!hasMatchingVariant) {
-              console.log(
-                `[PromotionService] Condition Failed ${promo.id}: SPECIFIC_VARIANTS not found`,
-              );
-              // NOTE: Frontend treats variant checks strictly if they exist on the condition being iterated.
-              // However, for pure product IDs, it effectively uses the aggregated list.
-              // If we have mixed strict-variant and loose-product conditions, this might be tricky.
-              // Given the logs, the failing conditions are simple product checks.
-
-              // If this condition failed strict variant check, we fail.
-              conditionsMet = false;
-            }
-          } else {
-            // General product check - use the aggregated list (OR logic)
-            // Frontend: if (specificProductIds.length > 0) return items.some(...)
-            const hasProduct = cartItems.some((item) =>
-              specificProductIds.includes(item.productId),
-            );
-
-            if (!hasProduct) {
-              console.log(
-                `[PromotionService] Condition Failed ${promo.id}: SPECIFIC_PRODUCT not found (checked aggregated list)`,
-              );
-              conditionsMet = false;
-            }
-          }
-        } else if (condition.type === "CUSTOMER_TAG") {
-          // Validate customer has required tag
-          if (!userId) {
-            console.log(
-              `[PromotionService] Condition Failed ${promo.id}: CUSTOMER_TAG requires authenticated user`,
-            );
-            conditionsMet = false;
-          } else {
-            try {
-              const userDoc = await adminFirestore
-                .collection("users")
-                .doc(userId)
-                .get();
-
-              if (!userDoc.exists) {
-                console.log(
-                  `[PromotionService] Condition Failed ${promo.id}: User ${userId} not found`,
-                );
-                conditionsMet = false;
-              } else {
-                const userData = userDoc.data();
-                const customerTags = userData?.tags || [];
-                const requiredTag = condition.value as string;
-
-                if (!customerTags.includes(requiredTag)) {
-                  console.log(
-                    `[PromotionService] Condition Failed ${promo.id}: Customer missing tag "${requiredTag}"`,
-                  );
-                  conditionsMet = false;
-                } else {
-                  console.log(
-                    `[PromotionService] CUSTOMER_TAG validated for ${promo.id}: Customer has tag "${requiredTag}"`,
-                  );
-                }
+    // 2. Check Non-Product Conditions (Mandatory logic: MIN_AMOUNT, MIN_QUANTITY, etc.)
+    let conditionsMet = true;
+    for (const condition of nonProductConditions) {
+      if (condition.type === "MIN_AMOUNT") {
+        if (cartTotal < Number(condition.value)) {
+          console.log(`[PromotionService] Condition Failed ${promo.id}: MIN_AMOUNT ${cartTotal} < ${condition.value}`);
+          conditionsMet = false;
+        }
+      } else if (condition.type === "MIN_QUANTITY") {
+        // Calculate qty using ONLY products that match this promotion's specific filters (if any)
+        let applicableItems = cartItems;
+        if (productConditions.length > 0) {
+          applicableItems = cartItems.filter(item => {
+            return productConditions.some(pc => {
+              const productIds = pc.productIds || [pc.value];
+              if (!productIds.includes(item.productId)) return false;
+              if (pc.variantMode === "SPECIFIC_VARIANTS" && pc.variantIds) {
+                return item.variantId && pc.variantIds.includes(item.variantId);
               }
-            } catch (error) {
-              console.error(
-                `[PromotionService] Error checking CUSTOMER_TAG for ${promo.id}:`,
-                error,
-              );
+              return true;
+            });
+          });
+        }
+
+        const totalQty = applicableItems.reduce((sum, item) => sum + item.quantity, 0);
+        if (totalQty < Number(condition.value)) {
+          console.log(`[PromotionService] Condition Failed ${promo.id}: MIN_QUANTITY ${totalQty} < ${condition.value}`);
+          conditionsMet = false;
+        }
+      } else if (condition.type === "CUSTOMER_TAG") {
+        if (!userId) {
+          console.log(`[PromotionService] Condition Failed ${promo.id}: CUSTOMER_TAG requires authenticated user`);
+          conditionsMet = false;
+        } else {
+          try {
+            const userDoc = await adminFirestore.collection("users").doc(userId).get();
+            if (!userDoc.exists) {
+              console.log(`[PromotionService] Condition Failed ${promo.id}: User not found`);
               conditionsMet = false;
+            } else {
+              const userData = userDoc.data();
+              const customerTags = userData?.tags || [];
+              const requiredTag = condition.value as string;
+              if (!customerTags.includes(requiredTag)) {
+                console.log(`[PromotionService] Condition Failed ${promo.id}: Customer missing tag "${requiredTag}"`);
+                conditionsMet = false;
+              }
             }
+          } catch (error) {
+            console.error(`[PromotionService] Error checking CUSTOMER_TAG:`, error);
+            conditionsMet = false;
           }
         }
       }
@@ -1004,8 +955,6 @@ export const calculateCartDiscount = async (
 
     // Get eligible cart items for discount calculation
     let eligibleItems = cartItems;
-
-    const productConditions = promo.conditions?.filter((c: any) => c.type === "SPECIFIC_PRODUCT") || [];
 
     if (
       promo.applicableProductVariants &&
