@@ -850,13 +850,23 @@ export const calculateCartDiscount = async (
             conditionsMet = false;
           }
         } else if (condition.type === "MIN_QUANTITY") {
-          // If there are specific products, count only those, otherwise count all (Frontend parity)
-          const applicableItems =
-            specificProductIds.length > 0
-              ? cartItems.filter((item) =>
-                specificProductIds.includes(item.productId),
-              )
-              : cartItems;
+          // Collect specific product conditions with variant awareness
+          const productConditions = promo.conditions?.filter((c: any) => c.type === "SPECIFIC_PRODUCT") || [];
+
+          let applicableItems = cartItems;
+          if (productConditions.length > 0) {
+            applicableItems = cartItems.filter((item) => {
+              return productConditions.some((pc: any) => {
+                const productId = pc.value || (pc.productIds && pc.productIds[0]);
+                if (item.productId !== productId) return false;
+
+                if (pc.variantMode === "SPECIFIC_VARIANTS" && pc.variantIds) {
+                  return item.variantId && pc.variantIds.includes(item.variantId);
+                }
+                return true;
+              });
+            });
+          }
 
           const totalQty = applicableItems.reduce(
             (sum, item) => sum + item.quantity,
@@ -968,6 +978,8 @@ export const calculateCartDiscount = async (
     // Get eligible cart items for discount calculation
     let eligibleItems = cartItems;
 
+    const productConditions = promo.conditions?.filter((c: any) => c.type === "SPECIFIC_PRODUCT") || [];
+
     if (
       promo.applicableProductVariants &&
       promo.applicableProductVariants.length > 0
@@ -976,11 +988,19 @@ export const calculateCartDiscount = async (
         cartItems,
         promo.applicableProductVariants,
       );
-    } else if (specificProductIds.length > 0) {
-      // Filter by SPECIFIC_PRODUCT conditions
-      eligibleItems = cartItems.filter((item) =>
-        specificProductIds.includes(item.productId),
-      );
+    } else if (productConditions.length > 0) {
+      // Filter by SPECIFIC_PRODUCT conditions WITH variant restrictions
+      eligibleItems = cartItems.filter((item) => {
+        return productConditions.some((pc: any) => {
+          const productId = pc.value || (pc.productIds && pc.productIds[0]);
+          if (item.productId !== productId) return false;
+
+          if (pc.variantMode === "SPECIFIC_VARIANTS" && pc.variantIds) {
+            return item.variantId && pc.variantIds.includes(item.variantId);
+          }
+          return true;
+        });
+      });
     } else if (
       promo.applicableProducts &&
       promo.applicableProducts.length > 0
