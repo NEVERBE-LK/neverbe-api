@@ -412,15 +412,19 @@ export const sendOrderConfirmedEmail = async (orderId: string) => {
           customerName: order.customer?.name || "Customer",
           orderId: (order.orderId || orderId).toUpperCase(),
 
-          items: safeItems.map((item) => ({
-            name: item.name || "Unknown Item",
-            variantName: item.variantName || "",
-            size: item.size || "-",
-            quantity: item.quantity || 1,
-            thumbnail:
-              item.thumbnail || "https://placehold.co/100x100?text=No+Img",
-            formattedPrice: formatMoney(item.price || 0),
-          })),
+          items: safeItems.map((item) => {
+            const netPrice = (item.price || 0) - (item.discount || 0);
+            return {
+              name: item.name || "Unknown Item",
+              variantName: item.variantName || "",
+              size: item.size || "-",
+              quantity: item.quantity || 1,
+              thumbnail:
+                item.thumbnail || "https://placehold.co/100x100?text=No+Img",
+              formattedPrice: formatMoney(netPrice),
+              originalPrice: (item.discount || 0) > 0 ? formatMoney(item.price || 0) : null,
+            };
+          }),
 
           customer: {
             address: order.customer?.address || "N/A",
