@@ -115,6 +115,7 @@ export const addWebOrder = async (order: Partial<Order>) => {
         bPrice: prod?.buyingPrice || 0,
       };
     });
+    orderData.items = order.items;
 
     // Validate Coupon if exists
     if (order.couponCode) {
