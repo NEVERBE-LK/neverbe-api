@@ -337,6 +337,8 @@ export const addWebOrder = async (order: Partial<Order>) => {
     orderData.appliedCouponId = appliedCouponId;
     orderData.appliedPromotionId = appliedPromotionId;
     orderData.appliedPromotionIds = appliedPromotionIds;
+    orderData.promotionDiscount = promotionDiscount;
+    orderData.discount = finalDiscount;
 
     // --- TRANSACTION ---
     let success = false;

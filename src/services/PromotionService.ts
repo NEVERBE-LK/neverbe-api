@@ -1018,7 +1018,17 @@ export const calculateCartDiscount = async (
         currentDiscount = action.maxDiscount;
       }
     } else if (action.type === "FIXED_OFF") {
-      currentDiscount = Math.min(action.value, eligibleTotal);
+      // Apply scaling multiplier if MIN_QUANTITY is present
+      const minQtyCondition = promo.conditions?.find(c => c.type === "MIN_QUANTITY");
+      const minQtyValue = minQtyCondition ? Number(minQtyCondition.value) : 0;
+      
+      if (minQtyValue > 0) {
+        const totalEligibleQty = eligibleItems.reduce((sum, item) => sum + item.quantity, 0);
+        const multiplier = Math.floor(totalEligibleQty / minQtyValue);
+        currentDiscount = Math.min(action.value * multiplier, eligibleTotal);
+      } else {
+        currentDiscount = Math.min(action.value, eligibleTotal);
+      }
     } else if (action.type === "FREE_SHIPPING") {
       // NOTE: Free shipping discount is typically applied later in checkout flow once shipping cost is known,
       // but to flag it as an active applied promotion, we add a nominal >0 discount OR explicitly add to eligible array.
