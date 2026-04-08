@@ -179,7 +179,7 @@ const updateInventoryFromGRN = async (items: GRNItem[]): Promise<void> => {
       const inventoryDoc = inventoryQuery.docs[0];
       const currentQty = inventoryDoc.data().quantity || 0;
       batch.update(inventoryDoc.ref, {
-        quantity: currentQty + item.receivedQuantity,
+        quantity: Math.max(0, currentQty) + item.receivedQuantity,
         updatedAt: FieldValue.serverTimestamp(),
       });
     } else {

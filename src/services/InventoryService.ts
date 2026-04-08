@@ -282,9 +282,10 @@ export const updateProductStockCount = async (
     });
 
     const inStock = totalStock > 0;
+    const finalTotalStock = totalStock;
 
     await productRef.update({
-      totalStock: totalStock,
+      totalStock: finalTotalStock,
       inStock: inStock,
       updatedAt: FieldValue.serverTimestamp(), // Also update product timestamp
     });

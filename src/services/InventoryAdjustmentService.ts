@@ -266,13 +266,11 @@ const updateInventoryFromAdjustment = async (
     switch (type) {
       case "add":
       case "return":
-        newQty = currentQty + item.quantity;
-        change = item.quantity;
+        newQty = Math.max(0, currentQty) + item.quantity;
         break;
       case "remove":
       case "damage":
         newQty = Math.max(0, currentQty - item.quantity);
-        change = -item.quantity;
         break;
       case "transfer":
         newQty = Math.max(0, currentQty - item.quantity);
@@ -280,9 +278,10 @@ const updateInventoryFromAdjustment = async (
         if (item.destinationStockId) {
           await addToDestinationStock(item);
         }
-        change = 0; // Transfer doesn't change total stock
         break;
     }
+
+    change = newQty - currentQty;
 
     if (!inventoryQuery.empty) {
       batch.update(inventoryRef, {
@@ -308,19 +307,10 @@ const updateInventoryFromAdjustment = async (
     }
   }
 
-  for (const [productId, change] of Object.entries(productUpdates)) {
-    const productRef = adminFirestore.collection("products").doc(productId);
-    const updateData: any = {
-      totalStock: FieldValue.increment(change),
-      updatedAt: FieldValue.serverTimestamp(),
-    };
-
-    // If we are adding stock, ensure inStock is true
-    if (change > 0) {
-      updateData.inStock = true;
-    }
-
-    batch.update(productRef, updateData);
+  // Recalculate global stock for all affected products
+  const { updateProductStockCount } = await import("./InventoryService");
+  for (const productId of Object.keys(productUpdates)) {
+    await updateProductStockCount(productId);
   }
 
   await batch.commit();

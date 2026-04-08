@@ -96,12 +96,24 @@ export const addItemToPosCart = async (item: POSCartItem, userId: string) => {
       );
     }
 
-    // 3️⃣ Deduct stock (allow negative)
-    tx.update(inventoryRef, {
-      quantity: inventoryData.quantity - item.quantity,
-    });
+    // 3️⃣ Deduct stock (dont go minus)
+    const newInvQty = inventoryData.quantity - item.quantity;
+    tx.update(inventoryRef, { quantity: newInvQty });
 
-    // 4️⃣ Add to POS cart
+    // 4️⃣ Update product global stock
+    const productRef = adminFirestore.collection("products").doc(item.itemId);
+    const productSnap = await tx.get(productRef);
+    if (productSnap.exists) {
+      const prodData = productSnap.data() as Product;
+      const newTotalStock = (prodData.totalStock ?? 0) - item.quantity;
+      tx.update(productRef, {
+        totalStock: newTotalStock,
+        inStock: newTotalStock > 0,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    // 5️⃣ Add to POS cart
     tx.set(posCart.doc(), {
       ...item,
       userId: userId || "anonymous",
@@ -132,9 +144,21 @@ export const removeFromPosCart = async (item: POSCartItem, userId: string) => {
     const inventoryData = inventoryQuery.docs[0].data() as InventoryItem;
 
     // 2️⃣ Restore stock
-    tx.update(inventoryRef, {
-      quantity: inventoryData.quantity + item.quantity,
-    });
+    const newInvQty = inventoryData.quantity + item.quantity;
+    tx.update(inventoryRef, { quantity: newInvQty });
+
+    // 2.1️⃣ Restore product global stock
+    const productRef = adminFirestore.collection("products").doc(item.itemId);
+    const productSnap = await tx.get(productRef);
+    if (productSnap.exists) {
+      const prodData = productSnap.data() as Product;
+      const newTotalStock = (prodData.totalStock ?? 0) + item.quantity;
+      tx.update(productRef, {
+        totalStock: newTotalStock,
+        inStock: newTotalStock > 0,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
 
     // 3️⃣ Delete item from POS cart
     let cartQuery = posCart
@@ -156,24 +180,72 @@ export const removeFromPosCart = async (item: POSCartItem, userId: string) => {
 };
 
 // ✅ Clear entire POS cart (scoped to user/stock mandatory)
-export const clearPosCart = async (stockId: string, userId: string) => {
+export const clearPosCart = async (
+  stockId: string,
+  userId: string,
+  restock: boolean = true,
+) => {
   try {
-    let query = adminFirestore.collection("pos_cart").limit(500); // Batch limit
+    let query: admin.firestore.Query = adminFirestore.collection("pos_cart").limit(500);
 
-    if (stockId) {
-      query = query.where("stockId", "==", stockId);
-    }
-    if (userId) {
-      query = query.where("userId", "==", userId);
-    }
+    if (stockId) query = query.where("stockId", "==", stockId);
+    if (userId) query = query.where("userId", "==", userId);
 
     const snap = await query.get();
     if (snap.empty) return;
 
     const batch = adminFirestore.batch();
+    const items = snap.docs.map((d) => d.data() as POSCartItem);
+
+    if (restock) {
+      // Group items by product for more efficient product updates
+      const productUpdates = new Map<string, number>();
+
+      await Promise.all(
+        items.map(async (item) => {
+          // 1️⃣ Find inventory item
+          const invQuery = await adminFirestore
+            .collection("stock_inventory")
+            .where("productId", "==", item.itemId)
+            .where("variantId", "==", item.variantId)
+            .where("size", "==", item.size)
+            .where("stockId", "==", item.stockId)
+            .limit(1)
+            .get();
+
+          if (!invQuery.empty) {
+            const invRef = invQuery.docs[0].ref;
+            const invData = invQuery.docs[0].data();
+            batch.update(invRef, {
+              quantity: (invData.quantity || 0) + item.quantity,
+            });
+          }
+
+          // Accumulate quantity to restore to global product stock
+          const currentTotal = productUpdates.get(item.itemId) || 0;
+          productUpdates.set(item.itemId, currentTotal + item.quantity);
+        }),
+      );
+
+      // 2️⃣ Update global product stocks
+      for (const [productId, quantity] of productUpdates.entries()) {
+        const productRef = adminFirestore.collection("products").doc(productId);
+        batch.update(productRef, {
+          totalStock: FieldValue.increment(quantity),
+          inStock: true,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    // 3️⃣ Delete from cart
     snap.docs.forEach((doc) => batch.delete(doc.ref));
+
     await batch.commit();
-    console.log("POS cart cleared for user:", userId, "stock:", stockId);
+    console.log(
+      `POS cart cleared ${restock ? "and stock restored" : "(order complete)"} for user:`,
+      userId,
+    );
   } catch (error) {
     console.error("clearPosCart failed:", error);
     throw error;
@@ -219,10 +291,22 @@ export const updatePosCartItemQuantity = async (
     const inventoryRef = inventoryQuery.docs[0].ref;
     const inventoryData = inventoryQuery.docs[0].data() as InventoryItem;
 
-    // 3️⃣ Update inventory (deduct if increasing, restore if decreasing)
-    tx.update(inventoryRef, {
-      quantity: inventoryData.quantity - quantityDiff,
-    });
+    // 3️⃣ Update inventory (deduct if increasing, restore if decreasing, dont go minus)
+    const newInvQty = inventoryData.quantity - quantityDiff;
+    tx.update(inventoryRef, { quantity: newInvQty });
+
+    // 3.1️⃣ Update product global stock
+    const productRef = adminFirestore.collection("products").doc(item.itemId);
+    const productSnap = await tx.get(productRef);
+    if (productSnap.exists) {
+      const prodData = productSnap.data() as Product;
+      const newTotalStock = (prodData.totalStock ?? 0) - quantityDiff;
+      tx.update(productRef, {
+        totalStock: newTotalStock,
+        inStock: newTotalStock > 0,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
 
     // 4️⃣ Update cart item quantity
     tx.update(cartDoc.ref, { quantity: newQuantity });
@@ -475,48 +559,8 @@ export const createPOSOrder = async (order: Partial<Order>, userId: string) => {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const batch = adminFirestore.batch();
-
-        await Promise.all(
-          order.items.map(async (item) => {
-            const invSnap = await adminFirestore
-              .collection("stock_inventory")
-              .where("productId", "==", item.itemId)
-              .where("variantId", "==", item.variantId)
-              .where("size", "==", item.size)
-              .where("stockId", "==", order.stockId)
-              .limit(1)
-              .get();
-
-            if (invSnap.empty)
-              throw new AppError(`Missing inventory for ${item.name}`, 404);
-
-            const invDoc = invSnap.docs[0];
-            const invData = invDoc.data() as InventoryItem;
-            const prodData = productMap.get(item.itemId);
-            if (!prodData)
-              throw new AppError(`Product not found: ${item.itemId}`, 404);
-
-            const newInvQty = Math.max(
-              (invData.quantity ?? 0) - item.quantity,
-              0,
-            );
-            const newTotalStock = Math.max(
-              (prodData.totalStock ?? 0) - item.quantity,
-              0,
-            );
-
-            batch.update(invDoc.ref, { quantity: newInvQty });
-            batch.update(
-              adminFirestore.collection("products").doc(item.itemId),
-              {
-                totalStock: newTotalStock,
-                inStock: newTotalStock > 0,
-                updatedAt: now,
-              },
-            );
-          }),
-        );
-
+        // NOTE: Stock is already deducted when adding items to the POS Cart.
+        // POS Checkout simply records the order and clears the cart without double-deduction.
         batch.set(orderRef, orderData);
         await batch.commit();
 
@@ -531,7 +575,7 @@ export const createPOSOrder = async (order: Partial<Order>, userId: string) => {
       }
     }
 
-    await clearPosCart(order.stockId, userId);
+    await clearPosCart(order.stockId, userId, false);
 
     // Integrity Update
     const { updateOrAddOrderHash } = await import("./IntegrityService");
