@@ -168,14 +168,20 @@ export const removeFromPosCart = async (item: POSCartItem, userId: string) => {
 
     // --- ALL READS DONE, START WRITES ---
 
-    // 4️⃣ Restore stock
-    const newInvQty = inventoryData.quantity + item.quantity;
+    if (cartSnapshot.empty) {
+      throw new AppError("Cart item not found", 404);
+    }
+
+    const cartItemData = cartSnapshot.docs[0].data() as POSCartItem;
+
+    // 4️⃣ Restore stock using the actual known cart item quantity
+    const newInvQty = inventoryData.quantity + cartItemData.quantity;
     tx.update(inventoryRef, { quantity: newInvQty });
 
     // 5️⃣ Restore product global stock
     if (productSnap.exists) {
       const prodData = productSnap.data() as Product;
-      const newTotalStock = (prodData.totalStock ?? 0) + item.quantity;
+      const newTotalStock = (prodData.totalStock ?? 0) + cartItemData.quantity;
       tx.update(productRef, {
         totalStock: newTotalStock,
         inStock: newTotalStock > 0,
@@ -184,9 +190,7 @@ export const removeFromPosCart = async (item: POSCartItem, userId: string) => {
     }
 
     // 6️⃣ Delete item from POS cart
-    if (!cartSnapshot.empty) {
-      tx.delete(cartSnapshot.docs[0].ref);
-    }
+    tx.delete(cartSnapshot.docs[0].ref);
   });
 };
 
