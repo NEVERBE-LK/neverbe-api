@@ -284,18 +284,16 @@ export const getRecentOrders = async (
     const orders: RecentOrder[] = querySnapshot.docs.map((doc) => {
       const data = doc.data() as Order;
 
-      // Calculate Gross (items * quantity)
+      // Net Amount = order.total (the real cash received, already correct from backend)
+      const netAmount = data.total || 0;
+
+      // Gross Amount = raw item prices before any discount
       const grossAmount = Array.isArray(data.items)
         ? data.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-        : 0;
+        : netAmount;
 
-      // Aggregating all discounts: item-level + order coupons + auto promotions
-      const itemDiscounts = Array.isArray(data.items)
-        ? data.items.reduce((sum, item) => sum + (item.discount || 0), 0)
-        : 0;
-      const discountAmount = itemDiscounts + (data.discount || 0) + (data.promotionDiscount || 0);
-
-      const netAmount = grossAmount - discountAmount;
+      // Discount = difference between gross and net (+ shipping/fees if applicable)
+      const discountAmount = Math.max(0, grossAmount - netAmount - (data.shippingFee || 0) + (data.fee || 0));
 
       // Format date
       const createdAt =
