@@ -330,6 +330,77 @@ export const sendOrderConfirmedSMS = async (orderId: string) => {
   }
 };
 
+/** Send POS eBill SMS */
+export const sendeBillSMS = async (orderId: string, phone: string) => {
+  try {
+    console.log(`[Notification Service] sendeBillSMS called for order: ${orderId} to phone: ${phone}`);
+
+    const TEXT_API_KEY = process.env.TEXT_API_KEY;
+    if (!TEXT_API_KEY) {
+      console.warn(`[Notification Service] Missing TEXT_API_KEY`);
+      return false;
+    }
+
+    if (!phone || !orderId) {
+      console.warn(`[Notification Service] Missing phone or orderId for eBill SMS`);
+      return false;
+    }
+
+    const cleanPhone = phone.trim();
+    const ebillUrl = `https://neverbe.lk/ebill/${orderId}`;
+    const text = `NEVERBE: Thank you for your purchase! View & download your eBill here: ${ebillUrl}`;
+    
+    // We can use a hash to prevent sending the exact same eBill SMS to the same phone within a short time.
+    const hashValue = generateHash(cleanPhone + "EBILL" + orderId);
+
+    const existing = await adminFirestore
+      .collection(NOTIFICATION_TRACKER)
+      .where("orderId", "==", orderId)
+      .where("hashValue", "==", hashValue)
+      .where("type", "==", "ebill_sms")
+      .get();
+
+    if (!existing.empty) {
+      const lastSentTime = existing.docs[0].data().createdAt.toDate();
+      const now = new Date();
+      // Allow resending if it's been more than 5 minutes, in case they requested it again.
+      if ((now.getTime() - lastSentTime.getTime()) / 1000 < 300) {
+        console.warn(`[Notification Service] Duplicate eBill SMS detected within 5 mins for order: ${orderId}`);
+        return false;
+      }
+    }
+
+    const response = await fetch("https://api.textit.biz/", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${TEXT_API_KEY}`,
+        "Content-Type": "application/json",
+        Accept: "*/*",
+      },
+      body: JSON.stringify({ to: cleanPhone, text }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    console.log(`[Notification Service] eBill SMS sent for order ${orderId} to ${cleanPhone}`);
+
+    await adminFirestore.collection(NOTIFICATION_TRACKER).add({
+      orderId,
+      type: "ebill_sms",
+      to: cleanPhone,
+      hashValue,
+      createdAt: new Date(),
+    });
+
+    return true;
+  } catch (error) {
+    console.error(`[Notification Service] Failed to send eBill SMS for order ${orderId}:`, error);
+    return false;
+  }
+};
+
 /** * Send Order Confirmation Email via Firebase Extension
  * Robust error handling prevents crashes if order data is incomplete.
  * Uses stored totals directly instead of re-calculating.

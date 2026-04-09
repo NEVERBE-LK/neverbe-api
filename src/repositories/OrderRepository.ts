@@ -109,6 +109,7 @@ export class OrderRepository extends BaseRepository<Order> {
     const snapshot = await this.collection
       .where("userId", "==", userId)
       .orderBy("createdAt", "desc")
+      .where("from", "==", "Website")
       .limit(limit)
       .get();
 
