@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendeBillSMS } from "@/services/NotificationService";
-import { extractToken } from "@/utils/auth";
-import { verifyAuthToken } from "@/firebase/firebaseAdmin";
+import { verifyPosAuth, handleAuthError } from "@/services/AuthService";
 
 export const POST = async (req: NextRequest) => {
   try {
     // Basic Auth Check to ensure it's a valid POS user/admin triggering this
-    const token = extractToken(req);
-    if (!token) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
-    
-    // Verify token (this will throw if invalid)
-    await verifyAuthToken(token);
+    await verifyPosAuth();
 
     const body = await req.json();
     const { orderId, phone } = body;
