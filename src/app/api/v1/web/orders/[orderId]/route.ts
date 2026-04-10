@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrderByIdForInvoice } from "@/services/WebOrderService";
 
+/** eBill expiration period for POS (Store) orders: 1 month */
+const EBILL_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
 export const GET = async (
   req: NextRequest,
   context: { params: Promise<{ orderId: string }> },
@@ -15,6 +18,30 @@ export const GET = async (
     }
 
     const order = await getOrderByIdForInvoice(orderId);
+
+    // eBill Expiration: POS (Store) orders expire after 1 month
+    if (order.from === "Store") {
+      let orderDate: Date | null = null;
+
+      if (order.createdAt?._seconds) {
+        orderDate = new Date(order.createdAt._seconds * 1000);
+      } else if (order.createdAt?.toDate) {
+        orderDate = order.createdAt.toDate();
+      } else if (order.createdAt) {
+        orderDate = new Date(order.createdAt);
+      }
+
+      if (orderDate) {
+        const now = new Date();
+        const elapsed = now.getTime() - orderDate.getTime();
+        if (elapsed > EBILL_EXPIRY_MS) {
+          return NextResponse.json(
+            { message: "This eBill has expired. POS receipts are available for 30 days from the date of purchase.", expired: true },
+            { status: 410 },
+          );
+        }
+      }
+    }
 
     // We shouldn't return sensitive things like payment history if not needed,
     // but the frontend success page expects the order details.
