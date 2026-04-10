@@ -63,7 +63,7 @@ export class OrderRepository extends BaseRepository<Order> {
 
     const diffDays =
       (Date.now() - createdAtDate.getTime()) / (1000 * 60 * 60 * 24);
-    const expired = diffDays > 7;
+    const expired = diffDays > 30;
 
     return {
       ...order,

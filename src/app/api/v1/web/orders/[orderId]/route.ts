@@ -40,11 +40,14 @@ export const GET = async (
             { status: 410 },
           );
         }
+
+        // Calculate days remaining for expiry warning
+        const daysRemaining = Math.ceil((EBILL_EXPIRY_MS - elapsed) / (24 * 60 * 60 * 1000));
+        return NextResponse.json({ data: order, daysRemaining }, { status: 200 });
       }
     }
 
-    // We shouldn't return sensitive things like payment history if not needed,
-    // but the frontend success page expects the order details.
+    // Non-POS orders (no expiry)
     return NextResponse.json({ data: order }, { status: 200 });
   } catch (error: any) {
     console.error("[GET Order] Error:", error.message);
