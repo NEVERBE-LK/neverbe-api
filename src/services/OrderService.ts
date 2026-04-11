@@ -184,13 +184,6 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
 
     await orderRef.set(orderUpdate, { merge: true });
 
-    // 📣 Trigger Notifications if status changed and requested
-    if (order.sendNotification && order.status && order.status !== existingOrder.status) {
-      console.log(`[Order Service] Status changed from ${existingOrder.status} to ${order.status}. Triggering notifications...`);
-      // We don't await these to prevent blocking the main update response, but they are logged.
-      sendOrderStatusUpdateSMS(orderId, order.status);
-      sendOrderStatusUpdateEmail(orderId, order.status);
-    }
 
     // ✅ Fetch the final updated data
     const updatedOrderDoc = await orderRef.get();
@@ -206,21 +199,22 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     // 🔒 Update or add hash ledger entry
     await updateOrAddOrderHash(updatedOrderData);
 
-    // 🔔 Automated Customer Notifications
-    // Only trigger if status changed and it's one of the notification statuses
+    // 🔔 Unified Customer Notifications
+    // Only trigger if status changed, it's a notification-eligible status, AND the user requested it via sendNotification flag.
     const oldStatus = existingOrder.status?.toUpperCase();
     const newStatus = order.status?.toUpperCase();
+    const shouldNotify = order.sendNotification === true;
 
-    if (newStatus && oldStatus !== newStatus) {
+    if (shouldNotify && newStatus && oldStatus !== newStatus) {
       const triggerStatuses = ["PROCESSING", "COMPLETED", "CANCELLED"];
       if (triggerStatuses.includes(newStatus)) {
-        console.log(`[Order Service] Triggering automated notification for ${orderId} (${newStatus})`);
+        console.log(`[Order Service] Triggering consolidated notification for ${orderId} (${newStatus})`);
         
-        // Fire and forget or await? Usually better to await for robustness, or use promise.all
+        // Concurrent notification delivery
         Promise.all([
           sendOrderStatusUpdateSMS(orderId, newStatus),
           sendOrderStatusUpdateEmail(orderId, newStatus)
-        ]).catch(err => console.error(`[Order Service] Notification firing failed for ${orderId}:`, err));
+        ]).catch(err => console.error(`[Order Service] Unified notification failure for ${orderId}:`, err));
       }
     }
 
