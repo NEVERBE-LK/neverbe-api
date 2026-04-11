@@ -567,9 +567,7 @@ export const processExchange = async (
     .doc(exchangeId)
     .get();
 
-}
-
-return exchangeDoc.data() as ExchangeRecord;
+  return exchangeDoc.data() as ExchangeRecord;
 };
 
 // ================================
