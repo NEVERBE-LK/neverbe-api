@@ -1,68 +1,51 @@
-import { adminFirestore } from "@/firebase/firebaseAdmin";
-import { authorizeRequest } from "@/services/AuthService";
-import { sendManualNotification } from "@/services/NotificationService";
-import { errorResponse, successResponse } from "@/utils/apiResponse";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getNotificationLogs, sendManualNotification } from "@/services/NotificationService";
+import { apiResponse } from "@/utils/apiResponse";
 
-const NOTIFICATION_TRACKER = "notifications_sent";
-
-/**
- * GET: Fetch notification history for a specific order
- */
 export const GET = async (
-  req: Request,
-  { params }: { params: Promise<{ orderId: string }> }
+  req: NextRequest,
+  context: { params: Promise<{ orderId: string }> }
 ) => {
   try {
-    const isAuthorized = await authorizeRequest(req, "view_orders");
-    if (!isAuthorized) return errorResponse("Unauthorized", 401);
+    const orderId = (await context.params).orderId;
+    if (!orderId) {
+      return apiResponse(null, "Order ID is required", 400);
+    }
 
-    const { orderId } = await params;
-
-    const snapshot = await adminFirestore
-      .collection(NOTIFICATION_TRACKER)
-      .where("orderId", "==", orderId)
-      .orderBy("createdAt", "desc")
-      .get();
-
-    const history = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    return NextResponse.json(history);
+    const logs = await getNotificationLogs(orderId);
+    return apiResponse(logs, "Notification logs retrieved successfully");
   } catch (error: any) {
-    return errorResponse(error);
+    console.error("[Notification Route] GET Error:", error.message);
+    return apiResponse(null, "Failed to retrieve notification logs", 500);
   }
 };
 
-/**
- * POST: Send a manual notification (SMS or Email) to the customer
- */
 export const POST = async (
-  req: Request,
-  { params }: { params: Promise<{ orderId: string }> }
+  req: NextRequest,
+  context: { params: Promise<{ orderId: string }> }
 ) => {
   try {
-    const isAuthorized = await authorizeRequest(req, "update_orders");
-    if (!isAuthorized) return errorResponse("Unauthorized", 401);
-
-    const { orderId } = await params;
+    const orderId = (await context.params).orderId;
     const body = await req.json();
     const { type, content, subject } = body;
 
-    if (!type || !content) {
-      return errorResponse("Type (sms/email) and content are required", 400);
+    if (!orderId || !type || !content) {
+      return apiResponse(null, "Missing required fields (orderId, type, content)", 400);
     }
 
-    const result = await sendManualNotification(orderId, type as "sms" | "email", content, subject);
+    if (type !== "sms" && type !== "email") {
+      return apiResponse(null, "Invalid notification type. Must be 'sms' or 'email'", 400);
+    }
+
+    const result = await sendManualNotification(orderId, type, content, subject);
 
     if (result) {
-      return successResponse(null, `Manual ${type.toUpperCase()} sent successfully`);
+      return apiResponse(null, "Notification sent successfully");
     } else {
-      return errorResponse(`Failed to send ${type.toUpperCase()}`, 500);
+      return apiResponse(null, "Failed to send notification. Check logs for details.", 500);
     }
   } catch (error: any) {
-    return errorResponse(error);
+    console.error("[Notification Route] POST Error:", error.message);
+    return apiResponse(null, "Internal Server Error", 500);
   }
 };

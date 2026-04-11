@@ -8,6 +8,10 @@ import {
 import { FieldValue } from "firebase-admin/firestore";
 import { AppError } from "@/utils/apiResponse";
 import { searchOrders } from "./AlgoliaService";
+import { 
+  sendOrderStatusUpdateSMS, 
+  sendOrderStatusUpdateEmail 
+} from "./NotificationService";
 
 import { toSafeLocaleString } from "./UtilService";
 import {
@@ -148,7 +152,7 @@ export const getOrder = async (orderId: string): Promise<Order> => {
   }
 };
 
-export const updateOrder = async (order: Order, orderId: string) => {
+export const updateOrder = async (order: Order & { sendNotification?: boolean }, orderId: string) => {
   try {
     const orderRef = adminFirestore.collection(ORDERS_COLLECTION).doc(orderId);
     const orderDoc = await orderRef.get();
@@ -183,6 +187,14 @@ export const updateOrder = async (order: Order, orderId: string) => {
     if (order.courier !== undefined) orderUpdate.courier = order.courier;
 
     await orderRef.set(orderUpdate, { merge: true });
+
+    // 📣 Trigger Notifications if status changed and requested
+    if (order.sendNotification && order.status && order.status !== existingOrder.status) {
+      console.log(`[Order Service] Status changed from ${existingOrder.status} to ${order.status}. Triggering notifications...`);
+      // We don't await these to prevent blocking the main update response, but they are logged.
+      sendOrderStatusUpdateSMS(orderId, order.status);
+      sendOrderStatusUpdateEmail(orderId, order.status);
+    }
 
     // ✅ Fetch the final updated data
     const updatedOrderDoc = await orderRef.get();

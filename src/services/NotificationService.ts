@@ -8,7 +8,7 @@ import { verifyCaptchaToken } from "./CapchaService";
 
 const OTP_COLLECTION = "otp_verifications";
 const OTP_EXPIRY_MINUTES = 5;
-const NOTIFICATION_TRACKER = "notifications_sent";
+export const NOTIFICATION_TRACKER = "notifications_sent";
 const OTP_TTL_DAYS = 1;
 const COOLDOWN_SECONDS = 60;
 const MAIL_COLLECTION = "mail";
@@ -641,10 +641,9 @@ export const sendOrderStatusUpdateSMS = async (orderId: string, status: string) 
     let text = "";
 
     const s = status.toUpperCase();
-    if (s === "PROCESSING") {
-      text = `NEVERBE: Hi ${name}, your order #${orderId.toUpperCase()} is now being processed. We'll notify you once it's shipped!`;
-    } else if (s === "COMPLETED") {
-      text = `NEVERBE: Great news ${name}! Your order #${orderId.toUpperCase()} is completed. Thank you for shopping with us!`;
+    if (s === "COMPLETED") {
+      const trackingInfo = order.trackingNumber ? ` Track your package: ${order.trackingNumber}${order.courier ? ` via ${order.courier}` : ""}` : "";
+      text = `NEVERBE: Great news ${name}! Your order #${orderId.toUpperCase()} is completed & shipped.${trackingInfo} Thank you for shopping with us!`;
     } else if (s === "CANCELLED") {
       text = `NEVERBE: Hi ${name}, your order #${orderId.toUpperCase()} has been cancelled. Please contact us if you have any questions.`;
     } else {
@@ -697,12 +696,10 @@ export const sendOrderStatusUpdateEmail = async (orderId: string, status: string
     let subject = `Order Update: #${orderId.toUpperCase()}`;
     let message = `Your order status has been updated.`;
 
-    if (s === "PROCESSING") {
-      subject = `Processing Your Order: #${orderId.toUpperCase()}`;
-      message = `We are now processing your order. You will receive another update when it ships.`;
-    } else if (s === "COMPLETED") {
-      subject = `Order Completed: #${orderId.toUpperCase()}`;
-      message = `Your order is now complete. Thank you for choosing NEVERBE!`;
+    if (s === "COMPLETED") {
+      subject = `Order Completed & Shipped: #${orderId.toUpperCase()}`;
+      const tracking = order.trackingNumber ? `<p>Your order has been shipped via <strong>${order.courier || "our courier partner"}</strong>. Tracking Number: <strong>${order.trackingNumber}</strong></p>` : "";
+      message = `Great news! Your order is now complete and has been shipped. ${tracking} Thank you for choosing NEVERBE!`;
     } else if (s === "CANCELLED") {
       subject = `Order Cancelled: #${orderId.toUpperCase()}`;
       message = `Your order has been cancelled. If this was a mistake, please reach out to us.`;
@@ -791,6 +788,25 @@ export const sendManualNotification = async (
   } catch (error) {
     console.error(`[Notification Service] Manual ${type} failed for ${orderId}:`, error);
     return false;
+  }
+};
+
+/** Get communication history for an order */
+export const getNotificationLogs = async (orderId: string) => {
+  try {
+    const snapshot = await adminFirestore
+      .collection(NOTIFICATION_TRACKER)
+      .where("orderId", "==", orderId)
+      .orderBy("createdAt", "desc")
+      .get();
+
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.error(`[Notification Service] Error fetching logs for ${orderId}:`, error);
+    return [];
   }
 };
 
