@@ -216,7 +216,8 @@ export const updateAdjustmentStatus = async (
 
     await docRef.update(updates);
 
-    // If completed, update inventory
+    // ⚠️ CRITICAL: Only COMPLETED status triggers physical inventory updates.
+    // APPROVED status is a review milestone and does NOT affect stock levels.
     if (status === "COMPLETED") {
       await updateInventoryFromAdjustment(currentData.items, currentData.type);
     }
