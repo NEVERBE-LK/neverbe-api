@@ -314,87 +314,136 @@ export const processExchange = async (
   // 5. Process inventory changes in a transaction
   const exchangeId = `EXC-${nanoid(8).toUpperCase()}`;
 
+  // Pre-resolve inventory IDs to keep the transaction clean and follow "reads before writes"
+  const inventoryIdMap: Record<string, string | null> = {};
+  const allTargets = [
+    ...returnedItems.map((i) => ({
+      pid: i.itemId,
+      vid: i.variantId,
+      size: i.size,
+    })),
+    ...replacementItems.map((i) => ({
+      pid: i.itemId,
+      vid: i.variantId,
+      size: i.size,
+    })),
+  ];
+
+  await Promise.all(
+    allTargets.map(async (t) => {
+      const key = `${t.pid}|${t.vid}|${t.size}`;
+      if (!inventoryIdMap[key]) {
+        inventoryIdMap[key] = await findExistingInventoryItem(
+          t.pid,
+          t.vid,
+          t.size,
+          stockId,
+        );
+      }
+    }),
+  );
+
   await adminFirestore.runTransaction(async (transaction) => {
-    // 5a. Restock returned items
-    for (const returnItem of returnedItems) {
-      const existingId = await findExistingInventoryItem(
-        returnItem.itemId,
-        returnItem.variantId,
-        returnItem.size,
-        stockId,
+    // 1️⃣ PHASE: READS
+    const uniqueIds = Array.from(
+      new Set(Object.values(inventoryIdMap).filter(Boolean)),
+    ) as string[];
+    const inventoryDocs: Record<string, any> = {};
+
+    if (uniqueIds.length > 0) {
+      const refs = uniqueIds.map((id) =>
+        adminFirestore.collection("stock_inventory").doc(id),
       );
+      const snaps = await transaction.getAll(...refs);
+      snaps.forEach((snap) => {
+        if (snap.exists) inventoryDocs[snap.id] = snap.data();
+      });
+    }
+
+    // 2️⃣ PHASE: LOGIC & CALCULATIONS (No more reads allowed after this if we write)
+    const inventoryUpdates: {
+      ref: admin.firestore.DocumentReference;
+      data: any;
+      isNew: boolean;
+    }[] = [];
+
+    // Track quantity changes during the transaction to handle multiple items affecting same stock
+    const tempQuantities: Record<string, number> = {};
+    for (const [id, data] of Object.entries(inventoryDocs)) {
+      tempQuantities[id] = data.quantity || 0;
+    }
+
+    // Process Returns
+    for (const item of returnedItems) {
+      const key = `${item.itemId}|${item.variantId}|${item.size}`;
+      const existingId = inventoryIdMap[key];
 
       if (existingId) {
-        // Get current quantity and add returned quantity
-        const invDoc = await transaction.get(
-          adminFirestore.collection("stock_inventory").doc(existingId),
-        );
-        const currentQty = invDoc.data()?.quantity || 0;
-        transaction.update(
-          adminFirestore.collection("stock_inventory").doc(existingId),
-          {
-            quantity: currentQty + returnItem.quantity,
+        tempQuantities[existingId] =
+          (tempQuantities[existingId] || 0) + item.quantity;
+        inventoryUpdates.push({
+          ref: adminFirestore.collection("stock_inventory").doc(existingId),
+          data: {
+            quantity: tempQuantities[existingId],
             updatedAt: admin.firestore.Timestamp.now(),
           },
-        );
+          isNew: false,
+        });
       } else {
-        // Create new inventory record
         const newId = nanoid(10);
-        transaction.set(
-          adminFirestore.collection("stock_inventory").doc(newId),
-          {
+        inventoryUpdates.push({
+          ref: adminFirestore.collection("stock_inventory").doc(newId),
+          data: {
             id: newId,
-            productId: returnItem.itemId,
-            variantId: returnItem.variantId,
-            size: returnItem.size,
+            productId: item.itemId,
+            variantId: item.variantId,
+            size: item.size,
             stockId: stockId,
-            quantity: returnItem.quantity,
+            quantity: item.quantity,
             createdAt: admin.firestore.Timestamp.now(),
             updatedAt: admin.firestore.Timestamp.now(),
           },
-        );
+          isNew: true,
+        });
       }
     }
 
-    // 5b. Deduct replacement items from stock
-    for (const replaceItem of replacementItems) {
-      const existingId = await findExistingInventoryItem(
-        replaceItem.itemId,
-        replaceItem.variantId,
-        replaceItem.size,
-        stockId,
-      );
+    // Process Replacements
+    for (const item of replacementItems) {
+      const key = `${item.itemId}|${item.variantId}|${item.size}`;
+      const existingId = inventoryIdMap[key];
 
       if (existingId) {
-        const invDoc = await transaction.get(
-          adminFirestore.collection("stock_inventory").doc(existingId),
-        );
-        const currentQty = invDoc.data()?.quantity || 0;
-        const newQty = currentQty - replaceItem.quantity;
+        const currentQty = tempQuantities[existingId] || 0;
+        const newQty = currentQty - item.quantity;
 
         if (newQty < 0) {
           throw new AppError(
-            `Insufficient stock for ${replaceItem.name} during transaction`,
+            `Insufficient stock for ${item.name} during transaction.`,
             400,
           );
         }
 
-        transaction.update(
-          adminFirestore.collection("stock_inventory").doc(existingId),
-          {
+        tempQuantities[existingId] = newQty;
+        inventoryUpdates.push({
+          ref: adminFirestore.collection("stock_inventory").doc(existingId),
+          data: {
             quantity: newQty,
             updatedAt: admin.firestore.Timestamp.now(),
           },
-        );
+          isNew: false,
+        });
       } else {
+        // This should theoretically be caught by pre-transaction validation,
+        // but as a fallback/integrity check:
         throw new AppError(
-          `Inventory record not found for ${replaceItem.name}`,
+          `Inventory record not found for ${item.name} (${item.size})`,
           400,
         );
       }
     }
 
-    // 5c. Create exchange record
+    // Create exchange record object
     const exchangeRecord: ExchangeRecord = {
       id: exchangeId,
       originalOrderId: order.orderId,
@@ -414,12 +463,28 @@ export const processExchange = async (
       updatedAt: admin.firestore.Timestamp.now(),
     };
 
+    // 3️⃣ PHASE: WRITES
+    // Apply inventory updates
+    // Note: If multiple updates target the same ref, only the last one in the array (most recent calculated) should be applied.
+    // We filter for distinct refs to avoid multiple writes to same doc in one transaction.
+    const finalUpdates = new Map<string, any>();
+    inventoryUpdates.forEach((u) => finalUpdates.set(u.ref.path, u));
+
+    for (const update of finalUpdates.values()) {
+      if (update.isNew) {
+        transaction.set(update.ref, update.data);
+      } else {
+        transaction.update(update.ref, update.data);
+      }
+    }
+
+    // Create exchange record
     transaction.set(
       adminFirestore.collection(EXCHANGES_COLLECTION).doc(exchangeId),
       exchangeRecord,
     );
 
-    // 5d. Update original order with exchange reference
+    // Update original order
     transaction.update(
       adminFirestore.collection(ORDERS_COLLECTION).doc(order.docId),
       {
