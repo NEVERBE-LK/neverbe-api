@@ -287,7 +287,17 @@ export const renderMultilingualSMS = async (templateId: string, data: Record<str
     if (template.si) parts.push(processTemplate(template.si, data));
     if (template.ta) parts.push(processTemplate(template.ta, data));
 
-    return parts.join("\n\n");
+    let message = parts.join("\n\n");
+    
+    // Append common footer (e.g., links or tracking info) once at the end
+    if (template.common) {
+      const processedCommon = processTemplate(template.common, data);
+      if (processedCommon.trim()) {
+        message += "\n\n" + processedCommon;
+      }
+    }
+
+    return message;
   } catch (error) {
     console.error(`[Notification Service] Template rendering failed for ${templateId}:`, error);
     return `NEVERBE: Update for Order #${data.orderId?.toUpperCase()}`; // Ultimate fallback

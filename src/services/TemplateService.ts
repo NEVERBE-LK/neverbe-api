@@ -20,9 +20,10 @@ export const getSMSTemplates = async () => {
       {
         id: "STATUS_COMPLETED",
         name: "Order Shipped (Completed)",
-        en: "NEVERBE: Great news {{name}}! Your order #{{orderId}} is completed & shipped.{{trackingInfo}}",
-        si: "NEVERBE: සුභ ආරංචියක් {{name}}! ඔබගේ ඇණවුම #{{orderId}} දැන් සම්පූර්ණ කර එවා ඇත.{{trackingInfo}}",
-        ta: "NEVERBE: நற்செய்தி {{name}}! உங்கள் ஆர்டர் #{{orderId}} முடிக்கப்பட்டு அனுப்பப்பட்டது.{{trackingInfo}}",
+        en: "NEVERBE: Great news {{name}}! Your order #{{orderId}} is completed & shipped.",
+        si: "NEVERBE: සුභ ආරංචියක් {{name}}! ඔබගේ ඇණවුම #{{orderId}} දැන් සම්පූර්ණ කර එවා ඇත.",
+        ta: "NEVERBE: நற்செய்தி {{name}}! உங்கள் ஆர்டர் #{{orderId}} முடிக்கப்பட்டு அனுப்பப்பட்டது.",
+        common: "{{trackingInfo}}",
         variables: ["name", "orderId", "trackingInfo"]
       },
       {
@@ -44,9 +45,10 @@ export const getSMSTemplates = async () => {
       {
         id: "EBILL_SENT",
         name: "POS eBill SMS",
-        en: "NEVERBE: Thank you for your purchase! View & download your eBill here: {{ebillUrl}}",
-        si: "NEVERBE: ඔබගේ මිලදී ගැනීමට ස්තූතියි! ඔබගේ විද්‍යුත් බිල්පත (eBill) මෙතැනින් බලන්න: {{ebillUrl}}",
-        ta: "NEVERBE: உங்கள் கொள்முதலுக்கு நன்றி! உங்கள் மின்-பற்றுச்சீட்டை (eBill) இங்கே பார்க்கலாம்: {{ebillUrl}}",
+        en: "NEVERBE: Thank you for your purchase!",
+        si: "NEVERBE: ඔබගේ මිලදී ගැනීමට ස්තූතියි!",
+        ta: "உங்கள் கொள்முதலுக்கு நன்றி!",
+        common: "View & download your eBill here: {{ebillUrl}}",
         variables: ["ebillUrl"]
       }
     ];
