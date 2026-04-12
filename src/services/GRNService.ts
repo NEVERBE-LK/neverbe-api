@@ -83,7 +83,7 @@ export const getGRNById = async (id: string): Promise<GRN> => {
 };
 
 /**
- * Create GRN and update inventory
+ * Create GRN (Can be DRAFT, SUBMITTED or APPROVED)
  */
 export const createGRN = async (
   grn: Omit<
@@ -94,9 +94,6 @@ export const createGRN = async (
   try {
     // Validate PO exists
     await getPurchaseOrderById(grn.purchaseOrderId);
-    // getPurchaseOrderById now throws 404 if not found, so no explicit check needed here unless it returns null?
-    // In PurchaseOrderService.ts, I updated it to throw AppError(404).
-    // So 'const po' will be valid.
 
     const grnNumber = await generateGRNNumber();
 
@@ -108,49 +105,95 @@ export const createGRN = async (
 
     // Create GRN document
     const id = `grn-${nanoid(8)}`;
-    await adminFirestore
-      .collection(COLLECTION)
-      .doc(id)
-      .set({
-        ...grn,
-        grnNumber,
-        totalAmount,
-        inventoryUpdated: false,
-        status: "COMPLETED",
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-
-    const docRef = adminFirestore.collection(COLLECTION).doc(id);
-
-    // Update inventory quantities
-    await updateInventoryFromGRN(grn.items);
-
-    // Mark GRN as inventory updated
-    await docRef.update({ inventoryUpdated: true });
-
-    // Update PO received quantities
-    await updateReceivedQuantities(
-      grn.purchaseOrderId,
-      grn.items.map((item) => ({
-        productId: item.productId,
-        variantId: item.variantId,
-        size: item.size,
-        quantity: item.receivedQuantity,
-      })),
-    );
-
-    return {
-      id: docRef.id,
+    const newGRN: GRN = {
       ...grn,
       grnNumber,
       totalAmount,
-      inventoryUpdated: true,
-    };
+      inventoryUpdated: false,
+      status: grn.status || "DRAFT",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    } as any;
+
+    await adminFirestore.collection(COLLECTION).doc(id).set(newGRN);
+
+    // If created as APPROVED or COMPLETED, trigger updates
+    if (grn.status === "APPROVED" || grn.status === "COMPLETED") {
+      await processGRNApproval(id);
+    }
+
+    return {
+      id,
+      ...newGRN,
+    } as any;
   } catch (error) {
     console.error("[GRNService] Error creating GRN:", error);
     throw error;
   }
+};
+
+/**
+ * Update GRN Status (Handle inventory updates on Approval)
+ */
+export const updateGRNStatus = async (
+  id: string,
+  status: GRNStatus,
+): Promise<GRN> => {
+  try {
+    const docRef = adminFirestore.collection(COLLECTION).doc(id);
+    const grn = await getGRNById(id);
+
+    if (grn.status === "COMPLETED" || grn.status === "REJECTED") {
+      throw new AppError(`Cannot update status of a ${grn.status} GRN`, 400);
+    }
+
+    await docRef.update({
+      status,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    if (
+      (status === "APPROVED" || status === "COMPLETED") &&
+      !grn.inventoryUpdated
+    ) {
+      await processGRNApproval(id);
+    }
+
+    return await getGRNById(id);
+  } catch (error) {
+    console.error("[GRNService] Error updating GRN status:", error);
+    throw error;
+  }
+};
+
+/**
+ * Process GRN Approval (Update inventory and PO)
+ */
+const processGRNApproval = async (id: string): Promise<void> => {
+  const grn = await getGRNById(id);
+  if (grn.inventoryUpdated) return;
+
+  const docRef = adminFirestore.collection(COLLECTION).doc(id);
+
+  // Update inventory quantities
+  await updateInventoryFromGRN(grn.items);
+
+  // Mark GRN as inventory updated
+  await docRef.update({ 
+    inventoryUpdated: true,
+    updatedAt: FieldValue.serverTimestamp()
+  });
+
+  // Update PO received quantities
+  await updateReceivedQuantities(
+    grn.purchaseOrderId,
+    grn.items.map((item) => ({
+      productId: item.productId,
+      variantId: item.variantId,
+      size: item.size,
+      quantity: item.receivedQuantity,
+    })),
+  );
 };
 
 /**

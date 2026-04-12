@@ -262,7 +262,7 @@ export const getPendingPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
   try {
     const snapshot = await adminFirestore
       .collection(COLLECTION)
-      .where("status", "in", ["SUBMITTED", "APPROVED"])
+      .where("status", "==", "APPROVED")
       .get();
 
     return snapshot.docs.map((doc) => ({

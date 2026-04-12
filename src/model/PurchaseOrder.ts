@@ -38,16 +38,16 @@ export interface PurchaseOrder {
 
 export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   DRAFT: "Draft",
-  SUBMITTED: "Sent",
-  APPROVED: "Partial",
+  SUBMITTED: "Submitted",
+  APPROVED: "Approved",
   COMPLETED: "Completed",
-  REJECTED: "Cancelled",
+  REJECTED: "Rejected",
 };
 
 export const PO_STATUS_COLORS: Record<PurchaseOrderStatus, string> = {
   DRAFT: "bg-gray-100 text-gray-800",
   SUBMITTED: "bg-blue-100 text-blue-800",
-  APPROVED: "bg-yellow-100 text-yellow-800",
-  COMPLETED: "bg-green-100 text-green-800",
+  APPROVED: "bg-green-100 text-green-800",
+  COMPLETED: "bg-indigo-100 text-indigo-800",
   REJECTED: "bg-red-100 text-red-800",
 };

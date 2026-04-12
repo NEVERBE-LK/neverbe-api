@@ -34,7 +34,7 @@ export const PUT = async (
   { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
-    const response = await authorizeRequest(req, "view_purchase_orders");
+    const response = await authorizeRequest(req, "create_purchase_orders");
     if (!response) return errorResponse("Unauthorized", 401);
 
     const { id } = await params;
@@ -46,15 +46,31 @@ export const PUT = async (
     }
 
     const body = JSON.parse(data as string);
+    const po = await updatePurchaseOrder(id, body);
+    return NextResponse.json(po);
+  } catch (error: any) {
+    return errorResponse(error);
+  }
+};
 
-    // Handle status update separately
-    if (body.status && Object.keys(body).length === 1) {
+export const PATCH = async (
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  try {
+    const { id } = await params;
+    const body = await req.json();
+    
+    // Status update logic
+    if (body.status) {
+      const response = await authorizeRequest(req, "approve_po");
+      if (!response) return errorResponse("Unauthorized", 401);
+      
       const po = await updatePOStatus(id, body.status);
       return NextResponse.json(po);
     }
 
-    const po = await updatePurchaseOrder(id, body);
-    return NextResponse.json(po);
+    return errorResponse("Invalid update", 400);
   } catch (error: any) {
     return errorResponse(error);
   }
