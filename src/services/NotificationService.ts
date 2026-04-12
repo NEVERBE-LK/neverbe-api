@@ -793,49 +793,53 @@ export const sendOrderStatusUpdateEmail = async (orderId: string, status: string
 
 /** Send Manual Customer Notification (SMS or Email) */
 export const sendManualNotification = async (
-  orderId: string,
+  orderId: string | null,
   type: "sms" | "email",
   content: string,
-  subject?: string
+  subject?: string,
+  toOverride?: string
 ) => {
   try {
-    const order: Order = await getOrderByIdForInvoice(orderId);
-    if (!order) return false;
+    let to = toOverride;
+    
+    if (orderId && !to) {
+      const order: Order = await getOrderByIdForInvoice(orderId);
+      if (!order) return false;
+      to = type === "sms" ? order.customer?.phone?.trim() : order.customer?.email?.trim();
+    }
+
+    if (!to) return false;
 
     if (type === "sms") {
       const TEXT_API_KEY = process.env.TEXT_API_KEY;
-      const phone = order.customer?.phone?.trim();
-      if (!TEXT_API_KEY || !phone) return false;
+      if (!TEXT_API_KEY) return false;
 
       await fetch("https://api.textit.biz/", {
         method: "POST",
         headers: { Authorization: `Basic ${TEXT_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ to: phone, text: content }),
+        body: JSON.stringify({ to, text: content }),
       });
     } else {
-      const email = order.customer?.email?.trim();
-      if (!email) return false;
-
       await adminFirestore.collection(MAIL_COLLECTION).add({
-        to: [email],
+        to: [to],
         message: {
-          subject: subject || `Update regarding your order #${orderId.toUpperCase()}`,
+          subject: subject || `Update regarding your order #${orderId?.toUpperCase() || 'NEVERBE'}`,
           html: `<div style="font-family: sans-serif; padding: 20px;">${content.replace(/\n/g, '<br/>')}</div>`,
         },
       });
     }
 
     await adminFirestore.collection(NOTIFICATION_TRACKER).add({
-      orderId,
+      orderId: orderId || "CUSTOM",
       type: `manual_${type}`,
-      to: type === "sms" ? order.customer?.phone : order.customer?.email,
+      to: to,
       content,
       createdAt: new Date(),
     });
 
     return true;
   } catch (error) {
-    console.error(`[Notification Service] Manual ${type} failed for ${orderId}:`, error);
+    console.error(`[Notification Service] Manual ${type} failed:`, error);
     return false;
   }
 };
