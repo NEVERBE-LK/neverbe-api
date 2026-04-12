@@ -834,7 +834,7 @@ export const sendManualNotification = async (
       type: `manual_${type}`,
       to: to,
       content,
-      createdAt: new Date(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
     return true;
@@ -852,17 +852,24 @@ export const getNotificationLogs = async (orderId: string) => {
     const snapshot = await adminFirestore
       .collection(NOTIFICATION_TRACKER)
       .where("orderId", "==", orderId)
-      .orderBy("createdAt", "desc")
+      // Removed orderBy to avoid index requirement for orderId + createdAt
       .get();
 
-    return snapshot.docs.map(doc => {
+    const logs = snapshot.docs.map(doc => {
       const data = doc.data();
+      let timestamp = data.createdAt;
+      if (timestamp?.toDate) timestamp = timestamp.toDate().getTime();
+      else if (timestamp?.seconds) timestamp = timestamp.seconds * 1000;
+
       return {
         id: doc.id,
         ...data,
-        createdAt: toSafeLocaleString(data.createdAt || "")
+        createdAt: timestamp || 0
       };
     });
+
+    // Sort in memory to ensure history shows in descending order
+    return logs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   } catch (error) {
     console.error(`[Notification Service] Error fetching logs for ${orderId}:`, error);
     return [];
