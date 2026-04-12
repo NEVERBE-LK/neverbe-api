@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import { getGenAI, getProModel } from "./AIService";
+import { getProModel } from "./AIService";
 import { generateSalesForecast } from "./TFService";
 import {
   getDailySnapshot,
