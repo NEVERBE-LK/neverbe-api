@@ -844,6 +844,8 @@ export const sendManualNotification = async (
   }
 };
 
+import { toSafeLocaleString } from "./UtilService";
+
 /** Get communication history for an order */
 export const getNotificationLogs = async (orderId: string) => {
   try {
@@ -858,7 +860,7 @@ export const getNotificationLogs = async (orderId: string) => {
       return {
         id: doc.id,
         ...data,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
+        createdAt: toSafeLocaleString(data.createdAt || "")
       };
     });
   } catch (error) {
@@ -867,26 +869,35 @@ export const getNotificationLogs = async (orderId: string) => {
   }
 };
 
-/** Get all customer communication history */
-export const getAllNotificationLogs = async (limit: number = 50) => {
+/** Get all customer communication history with pagination */
+export const getAllNotificationLogs = async (page: number = 1, pageSize: number = 20) => {
   try {
-    const snapshot = await adminFirestore
-      .collection(NOTIFICATION_TRACKER)
+    const trackerRef = adminFirestore.collection(NOTIFICATION_TRACKER);
+    
+    // 1. Get total count for pagination
+    const countSnapshot = await trackerRef.count().get();
+    const total = countSnapshot.data().count;
+
+    // 2. Fetch paginated data
+    const snapshot = await trackerRef
       .orderBy("createdAt", "desc")
-      .limit(limit)
+      .offset((page - 1) * pageSize)
+      .limit(pageSize)
       .get();
 
-    return snapshot.docs.map(doc => {
+    const logs = snapshot.docs.map(doc => {
       const data = doc.data();
       return {
         id: doc.id,
         ...data,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
+        createdAt: toSafeLocaleString(data.createdAt || "")
       };
     });
+
+    return { logs, total };
   } catch (error) {
     console.error(`[Notification Service] Error fetching all logs:`, error);
-    return [];
+    return { logs: [], total: 0 };
   }
 };
 

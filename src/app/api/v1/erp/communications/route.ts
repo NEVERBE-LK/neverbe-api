@@ -12,12 +12,12 @@ export async function GET(req: Request) {
     if (!isAuthorized) return errorResponse("Unauthorized", 401);
 
     const url = new URL(req.url);
-    const limitParam = url.searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : 50;
+    const page = parseInt(url.searchParams.get("page") || "1", 10);
+    const pageSize = parseInt(url.searchParams.get("pageSize") || "20", 10);
 
-    const logs = await getAllNotificationLogs(limit);
+    const { logs, total } = await getAllNotificationLogs(page, pageSize);
 
-    return NextResponse.json({ success: true, data: logs });
+    return NextResponse.json({ success: true, data: logs, total });
   } catch (error) {
     console.error("[Communications API] GET Error:", error);
     return errorResponse(error);
