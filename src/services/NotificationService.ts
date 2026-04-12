@@ -853,10 +853,14 @@ export const getNotificationLogs = async (orderId: string) => {
       .orderBy("createdAt", "desc")
       .get();
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
+      };
+    });
   } catch (error) {
     console.error(`[Notification Service] Error fetching logs for ${orderId}:`, error);
     return [];
@@ -872,10 +876,14 @@ export const getAllNotificationLogs = async (limit: number = 50) => {
       .limit(limit)
       .get();
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().getTime() : data.createdAt
+      };
+    });
   } catch (error) {
     console.error(`[Notification Service] Error fetching all logs:`, error);
     return [];
