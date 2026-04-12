@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import { getGenAI } from "./AIService";
+import { getGenAI, getProModel } from "./AIService";
 import { generateSalesForecast } from "./TFService";
 import {
   getDailySnapshot,
@@ -8,8 +8,12 @@ import {
   getNeuralRawContext,
   analyzeNeuralStockRisks,
   analyzeNeuralPromoStrategy,
-  analyzeNeuralCustomerRetention
+  analyzeNeuralCustomerRetention,
+  getCurrentMonthActualSales,
+  getMonthDaysInfo
 } from "./DataService";
+
+const FORECAST_SNAPSHOTS = "forecast_snapshots";
 
 const CACHE_COLLECTION = "neural_cache";
 const CACHE_KEY = "neural_core_feed";
@@ -77,8 +81,117 @@ export const updateNeuralCoreFeed = async (forceRefresh: boolean = false) => {
       getNeuralRawContext()
     ]);
 
-    // 3. Neural Projection (Future)
+    // 3. Neural Projection (Future) — Using Gemini 2.5 Pro for enhanced accuracy
     const tfResult = await generateSalesForecast(config.forecastWindow || 14, historical);
+
+    // 3a. AI-Enhanced Forecast Refinement (Gemini 2.5 Pro)
+    let aiForecastRefinement: any = null;
+    if ((tfResult as any).success) {
+      try {
+        const forecastData = (tfResult as any).predictions?.filter((p: any) => p.isForecast) || [];
+        const recentHistorical = historical.slice(-30);
+        const proModel = getProModel("You are a sales forecasting AI. Analyze historical data and TF.js predictions. Return ONLY a JSON object with: {adjustedPredictions: [{date, netSales}], confidence: number 0-100, monthlyTotal: number}. No markdown.");
+        
+        // Check cache for recent Pro model forecast
+        const proCacheDoc = await admin.firestore().collection("ai_response_cache").doc("forecast_pro").get();
+        const proCacheAge = proCacheDoc.exists ? (Date.now() - (proCacheDoc.data()?.updatedAt?.toDate()?.getTime() || 0)) / (1000 * 60 * 60) : 999;
+        
+        if (proCacheAge < 6 && proCacheDoc.data()?.data) {
+          console.log("[NeuralCore] Using cached Pro model forecast (within 6h window).");
+          aiForecastRefinement = proCacheDoc.data()?.data;
+        } else {
+          const prompt = `Historical 30-day sales: ${JSON.stringify(recentHistorical.map(h => ({date: h.date, sales: Math.round(h.netSales)})))}
+TF.js ${config.forecastWindow || 14}-day forecast: ${JSON.stringify(forecastData.map((f: any) => ({date: f.date, sales: Math.round(f.netSales)})))}
+Refine the forecast considering trends, day-of-week patterns, and seasonal factors.`;
+          
+          const result = await proModel.generateContent(prompt);
+          const text = result.response.text().replace(/```json\n?|```\n?/g, '').trim();
+          aiForecastRefinement = JSON.parse(text);
+          
+          // Cache the Pro model response
+          await admin.firestore().collection("ai_response_cache").doc("forecast_pro").set({
+            data: aiForecastRefinement,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          console.log(`[NeuralCore] Pro model forecast refinement completed. Confidence: ${aiForecastRefinement.confidence}%`);
+        }
+      } catch (err: any) {
+        console.warn("[NeuralCore] Pro model refinement failed, using TF.js baseline.", err.message);
+      }
+    }
+
+    // 3b. Persist Forecast Snapshot for Real vs AI comparison
+    const today = new Date().toISOString().split('T')[0];
+    const forecastOnly = (tfResult as any).success 
+      ? (tfResult as any).predictions?.filter((p: any) => p.isForecast).map((p: any) => ({
+          date: p.date,
+          predictedNetSales: aiForecastRefinement?.adjustedPredictions?.find((a: any) => a.date === p.date)?.netSales ?? Math.round(p.netSales)
+        }))
+      : [];
+    
+    if (forecastOnly.length > 0) {
+      await admin.firestore()
+        .collection(CACHE_COLLECTION).doc(CACHE_KEY)
+        .collection(FORECAST_SNAPSHOTS).doc(today)
+        .set({
+          generatedAt: new Date().toISOString(),
+          forecastWindow: config.forecastWindow || 14,
+          predictions: forecastOnly
+        });
+      console.log(`[NeuralCore] Forecast snapshot persisted for ${today} (${forecastOnly.length} days).`);
+    }
+
+    // 3c. Load Past Forecast Snapshots for Real vs AI Overlay
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const pastSnapshots = await admin.firestore()
+      .collection(CACHE_COLLECTION).doc(CACHE_KEY)
+      .collection(FORECAST_SNAPSHOTS)
+      .where("generatedAt", ">=", thirtyDaysAgo.toISOString())
+      .orderBy("generatedAt", "desc")
+      .limit(30)
+      .get();
+    
+    // Build "what AI predicted for dates that are now in the past"
+    const pastPredictionMap: Record<string, number> = {};
+    pastSnapshots.docs.forEach(doc => {
+      const snap = doc.data();
+      (snap.predictions || []).forEach((p: any) => {
+        // Only include predictions for dates that are now in the past (before today)
+        if (p.date < today && !pastPredictionMap[p.date]) {
+          pastPredictionMap[p.date] = p.predictedNetSales;
+        }
+      });
+    });
+
+    // 3d. Monthly Sales Target
+    const [monthlyActual, monthInfo] = await Promise.all([
+      getCurrentMonthActualSales(),
+      Promise.resolve(getMonthDaysInfo())
+    ]);
+    
+    // Calculate monthly forecast: actual so far + AI forecast for remaining days
+    const avgForecastDaily = (tfResult as any).success ? (tfResult as any).avgForecastedDaily : 0;
+    const aiMonthlyPrediction = aiForecastRefinement?.monthlyTotal || (avgForecastDaily * monthInfo.totalDays);
+    const monthlyForecastTarget = monthlyActual + (avgForecastDaily * monthInfo.remainingDays);
+
+    // Compute forecast accuracy from past predictions vs actual
+    let forecastAccuracy = 0;
+    let accuracyDataPoints = 0;
+    const historicalMap: Record<string, number> = {};
+    historical.forEach(h => { historicalMap[h.date] = h.netSales; });
+    
+    Object.entries(pastPredictionMap).forEach(([date, predicted]) => {
+      const actual = historicalMap[date];
+      if (actual !== undefined && predicted > 0) {
+        const error = Math.abs(actual - predicted) / Math.max(predicted, 1);
+        forecastAccuracy += (1 - Math.min(error, 1));
+        accuracyDataPoints++;
+      }
+    });
+    forecastAccuracy = accuracyDataPoints > 0 
+      ? Math.round((forecastAccuracy / accuracyDataPoints) * 1000) / 10 
+      : 0; // 0 means no data yet
 
     // 4. Intelligence Modules (Context-Shared)
     const neuralRisks = analyzeNeuralStockRisks(ctx, config.forecastWindow || 14);
@@ -228,6 +341,22 @@ export const updateNeuralCoreFeed = async (forceRefresh: boolean = false) => {
         orderStats: ctx.orderStats
       },
       projections: tfResult,
+      // 🆕 Real vs AI Forecast Overlay Data
+      pastPredictions: pastPredictionMap,
+      forecastAccuracy,
+      forecastAccuracyDataPoints: accuracyDataPoints,
+      // 🆕 Monthly Sales Target
+      monthlyTarget: {
+        actual: Math.round(monthlyActual),
+        forecast: Math.round(monthlyForecastTarget),
+        aiPrediction: Math.round(aiMonthlyPrediction),
+        daysElapsed: monthInfo.elapsedDays,
+        daysRemaining: monthInfo.remainingDays,
+        totalDays: monthInfo.totalDays,
+        monthName: monthInfo.monthName,
+        year: monthInfo.year,
+        progressPercent: monthlyForecastTarget > 0 ? Math.round((monthlyActual / monthlyForecastTarget) * 100) : 0
+      },
       generatedAt: new Date().toISOString()
     };
 

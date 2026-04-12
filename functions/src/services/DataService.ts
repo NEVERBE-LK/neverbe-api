@@ -196,6 +196,38 @@ export const getHistoricalSales = async (days?: number): Promise<HistoricalPoint
   }));
 };
 
+// --- Monthly Forecast Helpers ---
+
+export const getCurrentMonthActualSales = async (): Promise<number> => {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+  const snap = await admin.firestore()
+    .collection(COLLECTION_ORDERS)
+    .where("paymentStatus", "==", "Paid")
+    .where("createdAt", ">=", Timestamp.fromDate(monthStart))
+    .where("createdAt", "<=", Timestamp.fromDate(todayEnd))
+    .get();
+
+  let total = 0;
+  snap.docs.forEach(doc => {
+    const order = doc.data();
+    total += (order.total || 0) - (order.fee || 0);
+  });
+  return total;
+};
+
+export const getMonthDaysInfo = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const totalDays = new Date(year, month + 1, 0).getDate();
+  const elapsedDays = now.getDate();
+  const remainingDays = totalDays - elapsedDays;
+  return { totalDays, elapsedDays, remainingDays, monthName: now.toLocaleString('default', { month: 'long' }), year };
+};
+
 // --- Optimized Neural Analyzers ---
 
 export const analyzeNeuralCustomerRetention = (ctx: NeuralContext) => {

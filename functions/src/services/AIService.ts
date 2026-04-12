@@ -13,3 +13,14 @@ export const getGenAI = () => {
     }
     return genAIInstance;
 };
+
+/**
+ * Heavy model for accuracy-critical forecasting.
+ * Used by the sales prediction engine for maximum accuracy.
+ */
+export const getProModel = (systemInstruction?: string) => {
+    return getGenAI().getGenerativeModel({
+        model: "gemini-2.5-pro",
+        ...(systemInstruction ? { systemInstruction } : {})
+    });
+};
