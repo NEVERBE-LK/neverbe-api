@@ -1,5 +1,5 @@
 import * as admin from "firebase-admin";
-import { getGenAI } from "./AIService";
+import { getGenAI, getProModel } from "./AIService";
 import { generateSalesForecast } from "./TFService";
 import {
   getDailySnapshot,
@@ -268,7 +268,7 @@ export const updateNeuralCoreFeed = async (forceRefresh: boolean = false) => {
         briefing = cachedBriefing;
       } else {
         try {
-          const model = getGenAI().getGenerativeModel({ model: "gemini-2.0-flash", systemInstruction: "Provide a 2-sentence summary." });
+          const model = getProModel("Provide a 2-sentence executive strategic briefing. Be concise and insightful.");
           const prompt = `Health ${healthScore}, Sales Drift ${salesVelocity}%, Risks ${neuralRisks.length}. Resilience ${financialResilience}%`;
           const result = await model.generateContent(prompt);
           briefing = result.response.text();
