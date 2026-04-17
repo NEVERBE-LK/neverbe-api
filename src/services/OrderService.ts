@@ -58,37 +58,17 @@ export const getOrders = async (
       filters: filters.join(" AND "),
     });
 
-    const orders: Order[] = [];
-    for (const hit of hits as any[]) {
-      const integrityResult = await validateDocumentIntegrity(
-        ORDERS_COLLECTION,
-        hit.objectID || hit.id,
-      );
-
-      const order: Order = {
-        ...hit,
-        userId: hit.userId || null, // Ensure userId is at least null to satisfy required field
-        orderId: hit.objectID || hit.id,
-        integrity: integrityResult,
-        customer: hit.customer
-          ? {
-              ...hit.customer,
-              // Frontend expects strings, Algolia usually stores serialized versions
-            }
-          : null,
-      } as unknown as Order;
-      orders.push(order);
-    }
-    orders.sort((a, b) => {
+    let sortedHits = hits as any[];
+    
+    // 1. Sort all raw hits chronologically
+    sortedHits.sort((a, b) => {
       const getTime = (dateValue: any) => {
         if (!dateValue) return 0;
         if (typeof dateValue === "number") {
-          // If it's a seconds timestamp, convert to milliseconds, else assume milliseconds
           return dateValue < 10000000000 ? dateValue * 1000 : dateValue;
         }
         if (typeof dateValue === "object") {
-          if (dateValue._seconds !== undefined)
-            return dateValue._seconds * 1000;
+          if (dateValue._seconds !== undefined) return dateValue._seconds * 1000;
           if (dateValue.seconds !== undefined) return dateValue.seconds * 1000;
           if (dateValue.toMillis) return dateValue.toMillis();
         }
@@ -97,15 +77,33 @@ export const getOrders = async (
       return getTime(b.createdAt) - getTime(a.createdAt);
     });
 
-    // If we fetched the wide net, we must manually slice for pagination
-    const finalOrders = fetchAllMode 
-        ? orders.slice((page - 1) * size, page * size) 
-        : orders;
+    // 2. Slice for the current page IF we fetched a wide net
+    const pagedHits = fetchAllMode 
+      ? sortedHits.slice((page - 1) * size, page * size) 
+      : sortedHits;
 
-    console.log(`Fetched ${orders.length} orders from Algolia on page ${page}`);
+    // 3. Process integrity checks ONLY for the sliced items (max 20 per request)
+    const orders: Order[] = [];
+    for (const hit of pagedHits) {
+      const integrityResult = await validateDocumentIntegrity(
+        ORDERS_COLLECTION,
+        hit.objectID || hit.id,
+      );
+
+      const order: Order = {
+        ...hit,
+        userId: hit.userId || null, 
+        orderId: hit.objectID || hit.id,
+        integrity: integrityResult,
+        customer: hit.customer ? { ...hit.customer } : null,
+      } as unknown as Order;
+      orders.push(order);
+    }
+
+    console.log(`Fetched ${sortedHits.length} orders from Algolia, returning page ${page}`);
     return {
-      dataList: finalOrders,
-      total: fetchAllMode ? Math.min(orders.length, nbHits) : nbHits,
+      dataList: orders,
+      total: fetchAllMode ? Math.min(sortedHits.length, nbHits) : nbHits,
     };
   } catch (error: any) {
     console.error(error);

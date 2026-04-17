@@ -42,28 +42,25 @@ const setCachedResult = (key: string, data: any) => {
   });
 };
 
-export const searchProducts = async (
-  query: string = "",
-  params: {
-    page?: number;
-    hitsPerPage?: number;
-    filters?: string;
-  } = {},
+const executeWithCache = async (
+  indexName: string,
+  query: string,
+  params: any
 ) => {
-  const cacheKey = `products_index:${query}:${stringify(params)}`;
+  const cacheKey = `${indexName}:${query}:${stringify(params)}`;
   const cached = getCachedResult(cacheKey);
   
   if (cached) {
-    console.log(`[Algolia Cache] HIT for query: "${query}"`);
+    console.log(`[Algolia Cache] HIT for ${indexName} query: "${query}"`);
     return cached;
   }
 
-  console.log(`[Algolia Cache] MISS for query: "${query}" (Fetching...)`);
+  console.log(`[Algolia Cache] MISS for ${indexName} query: "${query}" (Fetching...)`);
   
   const { page = 0, hitsPerPage = 20, filters = "" } = params;
 
   const result = await getClient().searchSingleIndex({
-    indexName: "products_index",
+    indexName,
     searchParams: {
       query,
       page,
@@ -83,142 +80,32 @@ export const searchProducts = async (
   return finalResult;
 };
 
+export const searchProducts = async (
+  query: string = "",
+  params: { page?: number; hitsPerPage?: number; filters?: string } = {},
+) => executeWithCache("products_index", query, params);
+
 export const searchOrders = async (
   query: string = "",
-  params: {
-    page?: number;
-    hitsPerPage?: number;
-    filters?: string;
-  } = {},
-) => {
-  const { page = 0, hitsPerPage = 20, filters = "" } = params;
-
-  const result = await getClient().searchSingleIndex({
-    indexName: "orders_index",
-    searchParams: {
-      query,
-      page,
-      hitsPerPage,
-      filters,
-    },
-  });
-
-  return {
-    hits: result.hits,
-    nbHits: result.nbHits,
-    page: result.page,
-    nbPages: result.nbPages,
-  };
-};
+  params: { page?: number; hitsPerPage?: number; filters?: string } = {},
+) => executeWithCache("orders_index", query, params);
 
 export const searchStockInventory = async (
   query: string = "",
-  params: {
-    page?: number;
-    hitsPerPage?: number;
-    filters?: string;
-  } = {},
-) => {
-  const { page = 0, hitsPerPage = 20, filters = "" } = params;
-
-  const result = await getClient().searchSingleIndex({
-    indexName: "stock_inventory_index",
-    searchParams: {
-      query,
-      page,
-      hitsPerPage,
-      filters,
-    },
-  });
-
-  return {
-    hits: result.hits,
-    nbHits: result.nbHits,
-    page: result.page,
-    nbPages: result.nbPages,
-  };
-};
+  params: { page?: number; hitsPerPage?: number; filters?: string } = {},
+) => executeWithCache("stock_inventory_index", query, params);
 
 export const searchAdjustments = async (
   query: string = "",
-  params: {
-    page?: number;
-    hitsPerPage?: number;
-    filters?: string;
-  } = {},
-) => {
-  const { page = 0, hitsPerPage = 20, filters = "" } = params;
-
-  const result = await getClient().searchSingleIndex({
-    indexName: "adjustments_index",
-    searchParams: {
-      query,
-      page,
-      hitsPerPage,
-      filters,
-    },
-  });
-
-  return {
-    hits: result.hits,
-    nbHits: result.nbHits,
-    page: result.page,
-    nbPages: result.nbPages,
-  };
-};
+  params: { page?: number; hitsPerPage?: number; filters?: string } = {},
+) => executeWithCache("adjustments_index", query, params);
 
 export const searchPromotions = async (
   query: string = "",
-  params: {
-    page?: number;
-    hitsPerPage?: number;
-    filters?: string;
-  } = {},
-) => {
-  const { page = 0, hitsPerPage = 20, filters = "" } = params;
-
-  const result = await getClient().searchSingleIndex({
-    indexName: "promotions_index",
-    searchParams: {
-      query,
-      page,
-      hitsPerPage,
-      filters,
-    },
-  });
-
-  return {
-    hits: result.hits,
-    nbHits: result.nbHits,
-    page: result.page,
-    nbPages: result.nbPages,
-  };
-};
+  params: { page?: number; hitsPerPage?: number; filters?: string } = {},
+) => executeWithCache("promotions_index", query, params);
 
 export const searchCoupons = async (
   query: string = "",
-  params: {
-    page?: number;
-    hitsPerPage?: number;
-    filters?: string;
-  } = {},
-) => {
-  const { page = 0, hitsPerPage = 20, filters = "" } = params;
-
-  const result = await getClient().searchSingleIndex({
-    indexName: "coupons_index",
-    searchParams: {
-      query,
-      page,
-      hitsPerPage,
-      filters,
-    },
-  });
-
-  return {
-    hits: result.hits,
-    nbHits: result.nbHits,
-    page: result.page,
-    nbPages: result.nbPages,
-  };
-};
+  params: { page?: number; hitsPerPage?: number; filters?: string } = {},
+) => executeWithCache("coupons_index", query, params);
