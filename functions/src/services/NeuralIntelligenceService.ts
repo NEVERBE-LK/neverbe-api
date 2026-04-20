@@ -152,23 +152,32 @@ export const updateNeuralCoreFeed = async (forceRefresh: boolean = false) => {
       }
     }
 
-    // Compute forecast accuracy from past predictions vs actual
-    let forecastAccuracy = 0;
+    // Compute forecast accuracy using Volume-Weighted MAPE (WMAPE) for retail volatility
+    let totalError = 0;
+    let totalActual = 0;
     let accuracyDataPoints = 0;
+    
     const historicalMap: Record<string, number> = {};
     historical.forEach(h => { historicalMap[h.date] = h.netSales; });
 
     Object.entries(pastPredictionMap).forEach(([date, predicted]) => {
       const actual = historicalMap[date];
       if (actual !== undefined && predicted > 0) {
-        const error = Math.abs(actual - predicted) / Math.max(predicted, 1);
-        forecastAccuracy += (1 - Math.min(error, 1));
+        totalError += Math.abs(actual - predicted);
+        totalActual += actual;
         accuracyDataPoints++;
       }
     });
-    forecastAccuracy = accuracyDataPoints > 0
-      ? Math.round((forecastAccuracy / accuracyDataPoints) * 1000) / 10
-      : 0; // 0 means no data yet
+    
+    // Calculate WMAPE and convert to Accuracy %
+    let forecastAccuracy = 0;
+    if (accuracyDataPoints > 0 && totalActual > 0) {
+      const wmape = totalError / totalActual;
+      // Cap accuracy to 0 if error is massive, else 100 - error%
+      forecastAccuracy = Math.max(0, Math.round((1 - wmape) * 1000) / 10);
+    } else if (accuracyDataPoints > 0) {
+      forecastAccuracy = 0; // if actual was 0 but we had predictions
+    }
 
     // 4. Intelligence Modules (Context-Shared)
     const neuralRisks = analyzeNeuralStockRisks(ctx, config.forecastWindow || 14);
