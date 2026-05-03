@@ -2307,12 +2307,6 @@ export const getCashFlowReport = async (from: string, to: string) => {
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
 
-    if (to && new Date(to).getMonth() === 2) {
-      totalCashIn -= 5000;
-      totalTransactionFees += 2000;
-      totalNetCashFlow -= 7000;
-    }
-
     return {
       summary: {
         totalOrders,
@@ -2320,7 +2314,7 @@ export const getCashFlowReport = async (from: string, to: string) => {
         totalTransactionFees,
         totalExpenses,
         totalNetCashFlow,
-        // daily,
+        daily,
         from,
         to,
       },
