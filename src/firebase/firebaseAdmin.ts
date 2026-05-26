@@ -1,6 +1,12 @@
 import admin, { credential } from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 
+// Set environment variables for Google Cloud SDK auto-discovery
+if (process.env.FIREBASE_PROJECT_ID) {
+  process.env.GCLOUD_PROJECT = process.env.FIREBASE_PROJECT_ID;
+  process.env.GOOGLE_CLOUD_PROJECT = process.env.FIREBASE_PROJECT_ID;
+}
+
 // 1. Keep your working initialization logic
 if (!admin.apps.length) {
   if (process.env.FIREBASE_ADMIN_PRIVATE_KEY) {

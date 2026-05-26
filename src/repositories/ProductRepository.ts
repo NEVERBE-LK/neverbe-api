@@ -387,27 +387,43 @@ export class ProductRepository extends BaseRepository<Product> {
   }): Promise<{ dataList: Product[]; total: number }> {
     const { page = 1, size = 20, search, brand, category, status, listing } = options;
     
-    let query: Query = this.getActiveQuery();
+    let query: Query = this.getNonDeletedQuery();
 
     if (brand) query = query.where("brand", "==", brand);
     if (category) query = query.where("category", "==", category);
     if (typeof status === "boolean") query = query.where("status", "==", status);
     if (typeof listing === "boolean") query = query.where("listing", "==", listing);
 
+    // Fetch all products matching database filters sorted by creation date
+    const snapshot = await query.orderBy("createdAt", "desc").get();
+    let allProducts = snapshot.docs.map((doc) => doc.data() as Product);
+
+    // Apply text search in-memory to support case-insensitive substring contains matching
     if (search) {
-      query = query
-        .where("nameLower", ">=", search.toLowerCase())
-        .where("nameLower", "<=", search.toLowerCase() + "\uf8ff");
+      const searchTerms = search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+      if (searchTerms.length > 0) {
+        allProducts = allProducts.filter((product) => {
+          const nameLower = (product.name || "").toLowerCase();
+          const tagsLower = (product.tags || []).map((t) => t.toLowerCase());
+          const brandLower = (product.brand || "").toLowerCase();
+          const catLower = (product.category || "").toLowerCase();
+
+          // Match if all search terms are found in name, brand, category, or tags
+          return searchTerms.every(
+            (term) =>
+              nameLower.includes(term) ||
+              brandLower.includes(term) ||
+              catLower.includes(term) ||
+              tagsLower.some((t) => t.includes(term))
+          );
+        });
+      }
     }
 
-    const total = await this.countDocuments(query);
-    const snapshot = await query
-      .orderBy("createdAt", "desc")
-      .offset((page - 1) * size)
-      .limit(size)
-      .get();
+    const total = allProducts.length;
+    const startIndex = (page - 1) * size;
+    const dataList = allProducts.slice(startIndex, startIndex + size);
 
-    const dataList = snapshot.docs.map((doc) => doc.data() as Product);
     return { dataList, total };
   }
 

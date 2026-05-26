@@ -31,18 +31,20 @@ const enrichProductsWithLabels = async (
   return products.map((product) => {
     let createdAtDate: Date | null = null;
     if (product.createdAt) {
-        if (typeof (product.createdAt as any).toDate === 'function') {
-            createdAtDate = (product.createdAt as any).toDate();
-        } else {
-            createdAtDate = new Date(product.createdAt);
-        }
+      if (typeof (product.createdAt as any).toDate === 'function') {
+        createdAtDate = (product.createdAt as any).toDate();
+      } else {
+        createdAtDate = new Date(product.createdAt);
+      }
     }
 
     const isNewArrival = createdAtDate && createdAtDate >= ninetyDaysAgo;
     const isRestockingSoon = !product.inStock && approvedPOProductIds.has(product.id || product.productId);
+    const gender = (product.tags || []).filter((t) => ["men", "women", "kids", "unisex"].includes(t.toLowerCase()));
 
     return formatEntityDates({
       ...product,
+      gender,
       isNewArrival: !!isNewArrival,
       isRestockingSoon: !!isRestockingSoon,
     });
@@ -96,8 +98,8 @@ export const getNewArrivals = async (
 // ====================== Recent Items ======================
 
 export const getRecentItems = async (limit: number = 8) => {
-    const products = await productRepository.findRecent(limit);
-    return enrichProductsWithLabels(products);
+  const products = await productRepository.findRecent(limit);
+  return enrichProductsWithLabels(products);
 };
 
 // ====================== Get Product By ID ======================
@@ -121,14 +123,14 @@ export const getSimilarItems = async (itemId: string) => {
 export const getProductStock = async (productId: string, variantId: string, size: string) => {
   const ecomSettings = await settingsRepository.getEcommerceSettings();
   const erpSettings = await settingsRepository.getErpSettings();
-  
-  const stockId = ecomSettings?.stockId || 
-                  ecomSettings?.onlineStockId || 
-                  erpSettings?.stockId || 
-                  erpSettings?.onlineStockId || 
-                  erpSettings?.warehouseId || 
-                  "MAIN";
-  
+
+  const stockId = ecomSettings?.stockId ||
+    ecomSettings?.onlineStockId ||
+    erpSettings?.stockId ||
+    erpSettings?.onlineStockId ||
+    erpSettings?.warehouseId ||
+    "MAIN";
+
   if (stockId === "MAIN" && !ecomSettings?.stockId && !erpSettings?.stockId) {
     console.warn("[WebProductService] stockId missing in settings, falling back to 'MAIN'");
   }
@@ -142,13 +144,13 @@ export const getBatchProductStock = async (
 ): Promise<Record<string, number>> => {
   const ecomSettings = await settingsRepository.getEcommerceSettings();
   const erpSettings = await settingsRepository.getErpSettings();
-  
-  const stockId = ecomSettings?.stockId || 
-                  ecomSettings?.onlineStockId || 
-                  erpSettings?.stockId || 
-                  erpSettings?.onlineStockId || 
-                  erpSettings?.warehouseId || 
-                  "MAIN";
+
+  const stockId = ecomSettings?.stockId ||
+    ecomSettings?.onlineStockId ||
+    erpSettings?.stockId ||
+    erpSettings?.onlineStockId ||
+    erpSettings?.warehouseId ||
+    "MAIN";
 
   if (stockId === "MAIN" && !ecomSettings?.stockId && !erpSettings?.stockId) {
     console.warn("[WebProductService] stockId missing in settings, falling back to 'MAIN'");

@@ -49,8 +49,12 @@ const enrichProductsWithLabels = async (
     const isNewArrival = createdAt && (createdAt.isAfter(ninetyDaysAgo) || createdAt.isSame(ninetyDaysAgo, "day"));
     const isRestockingSoon = !product.inStock && approvedPOProductIds.has(product.id || product.productId);
 
+    // Dynamically extract gender from tags
+    const gender = (product.tags || []).filter((t) => ["men", "women", "kids", "unisex"].includes(t.toLowerCase()));
+
     return {
       ...product,
+      gender,
       isNewArrival: !!isNewArrival,
       isRestockingSoon: !!isRestockingSoon,
     };
@@ -59,20 +63,51 @@ const enrichProductsWithLabels = async (
 
 // ====================== Core Operations ======================
 
+const DEFAULT_PRODUCT_TEMPLATE: Partial<Product> = {
+  name: "",
+  category: "",
+  brand: "",
+  description: "",
+  thumbnail: { order: 0, url: "", file: "" },
+  variants: [],
+  weight: 0,
+  buyingPrice: 0,
+  sellingPrice: 0,
+  marketPrice: 0,
+  discount: 0,
+  listing: true,
+  status: true,
+  tags: [],
+  occasion: [],
+  style: [],
+  season: [],
+  fit: "",
+  material: "",
+};
+
 export const addProducts = async (product: Partial<Product>, file: File) => {
   const id = `p-${nanoid(8)}`.toLowerCase();
   const thumbnail = await uploadThumbnail(file, id);
 
-  const allSizes = new Set<string>();
-  (product.variants || []).forEach((v) => v.sizes?.forEach((s) => allSizes.add(s)));
+  // Merge defaults to ensure no fields are dropped or left undefined in Firestore
+  const mergedProduct = {
+    ...DEFAULT_PRODUCT_TEMPLATE,
+    ...product,
+  };
 
-  // Sync tags with questionnaire fields
-  const finalTags = syncProductTags(product, product.tags || []);
+  const allSizes = new Set<string>();
+  (mergedProduct.variants || []).forEach((v) => v.sizes?.forEach((s) => allSizes.add(s)));
+
+  // Sync tags with questionnaire fields (including gender)
+  const finalTags = syncProductTags(mergedProduct, mergedProduct.tags || []);
+
+  // Remove separate gender field from DB writes
+  delete mergedProduct.gender;
 
   return await productRepository.create(id, {
-    ...product,
+    ...mergedProduct,
     thumbnail,
-    nameLower: product.name?.toLowerCase(),
+    nameLower: mergedProduct.name?.toLowerCase(),
     tags: finalTags,
     availableSizes: Array.from(allSizes),
   });
@@ -83,26 +118,43 @@ export const updateProduct = async (
   product: Partial<Product>,
   file?: File | null,
 ) => {
-  const allSizes = new Set<string>();
-  (product.variants || []).forEach((v) => v.sizes?.forEach((s) => allSizes.add(s)));
+  const existingProduct = await productRepository.findById(id);
 
-  let thumbnail = product.thumbnail;
+  // Prevent overwriting or corrupting system fields during update
+  delete product.createdAt;
+  delete product.updatedAt;
+  delete product.id;
+  delete product.productId;
+
+  // Merge incoming updates with existing product data to ensure NO fields are dropped
+  const mergedProduct = {
+    ...DEFAULT_PRODUCT_TEMPLATE,
+    ...(existingProduct || {}),
+    ...product,
+  };
+
+  const allSizes = new Set<string>();
+  (mergedProduct.variants || []).forEach((v) => v.sizes?.forEach((s) => allSizes.add(s)));
+
+  let thumbnail = mergedProduct.thumbnail;
   if (file) {
-    const oldProduct = await productRepository.findById(id);
-    const oldPath = oldProduct?.thumbnail?.file;
+    const oldPath = existingProduct?.thumbnail?.file;
     if (oldPath) {
       try { await BUCKET.file(oldPath).delete(); } catch (delError) { console.warn(`Failed to delete old thumbnail`, delError); }
     }
     thumbnail = await uploadThumbnail(file, id);
   }
 
-  // Sync tags with questionnaire fields
-  const finalTags = syncProductTags(product, product.tags || []);
+  // Sync tags with questionnaire fields (including gender)
+  const finalTags = syncProductTags(mergedProduct, mergedProduct.tags || []);
+
+  // Remove separate gender field from DB writes
+  delete mergedProduct.gender;
 
   return await productRepository.update(id, {
-    ...product,
+    ...mergedProduct,
     thumbnail,
-    nameLower: product.name?.toLowerCase(),
+    nameLower: mergedProduct.name?.toLowerCase(),
     tags: finalTags,
     availableSizes: Array.from(allSizes),
   });
@@ -120,7 +172,7 @@ const syncProductTags = (product: Partial<Product>, existingTags: string[] = [])
 
   // Questionnaire fields from ERP
   const attributes: (keyof any)[] = ["gender", "occasion", "style", "season", "fit", "material"];
-  
+
   attributes.forEach(attr => {
     const val = (product as any)[attr];
     if (val) {
@@ -151,10 +203,15 @@ export const getProducts = async (
     page: pageNumber, size, search, brand, category, status, listing,
   });
 
-  const processed = dataList.map((p) => ({
-    ...p,
-    variants: p.variants.filter((v) => !v.isDeleted),
-  }));
+  const processed = dataList.map((p) => {
+    // Dynamically derive gender from tags to keep ERP frontend completely intact
+    const gender = (p.tags || []).filter((t) => ["men", "women", "kids", "unisex"].includes(t.toLowerCase()));
+    return {
+      ...p,
+      gender,
+      variants: p.variants.filter((v) => !v.isDeleted),
+    };
+  });
 
   return { dataList: processed, rowCount: total };
 };
@@ -162,8 +219,13 @@ export const getProducts = async (
 export const getProductById = async (id: string): Promise<Product> => {
   const product = await productRepository.findById(id, true);
   if (!product) throw new AppError("Product not found", 404);
+  
+  // Dynamically derive gender from tags for the edit form modal
+  const gender = (product.tags || []).filter((t) => ["men", "women", "kids", "unisex"].includes(t.toLowerCase()));
+
   return {
     ...product,
+    gender,
     variants: (product.variants || []).filter((v) => !v.isDeleted),
   } as Product;
 };
@@ -179,7 +241,7 @@ export const getPopularProducts = async (
   if (!startDay || !endDay) return [];
 
   const orders = await orderRepository.findPaidOrdersInDateRange(startDay, endDay);
-  
+
   const itemsMap = new Map<string, number>();
   orders.forEach((order) => {
     if (order.items) {
@@ -276,11 +338,11 @@ export const getCategoriesForSitemap = async () => categoryRepository.findForSit
 export const getPaymentMethods = async () => settingsRepository.findPaymentMethodsForWebsite();
 
 export const getProductDropdown = async () => {
-    const { dataList } = await productRepository.findAllPaginated({ size: 1000, status: true, listing: true });
-    return dataList.map(p => ({
-        id: p.id, label: p.name, buyingPrice: p.buyingPrice || 0,
-        variants: p.variants || [], availableSizes: p.availableSizes || [],
-    }));
+  const { dataList } = await productRepository.findAllPaginated({ size: 1000, status: true, listing: true });
+  return dataList.map(p => ({
+    id: p.id, label: p.name, buyingPrice: p.buyingPrice || 0,
+    variants: p.variants || [], availableSizes: p.availableSizes || [],
+  }));
 };
 
 export const getProductStock = async (productId: string, variantId: string, size: string) => {
