@@ -149,12 +149,12 @@ export const getOverviewByDateRange = async (
 
       const allDiscounts = orderDiscount + promoDiscount + itemDiscounts;
 
-      // Net Sale = total - orderFee
-      const netSale = orderTotal - orderFee;
+      // Net Sale = total - orderShippingFee - orderFee (standard net merchandise sale)
+      const netSale = orderTotal - orderShippingFee - orderFee;
       totalNetSales += netSale;
 
-      // Gross Sale (Sales) = total + allDiscounts - orderFee - orderShippingFee
-      const grossSale = orderTotal + allDiscounts - orderFee - orderShippingFee;
+      // Gross Sale = Net Sale + allDiscounts (clean gross sale before discount deductions)
+      const grossSale = netSale + allDiscounts;
       totalGrossSales += grossSale;
 
       totalShipping += orderShippingFee;
@@ -171,7 +171,8 @@ export const getOverviewByDateRange = async (
       totalFee += orderFee;
     });
 
-    const totalProfit = totalNetSales + totalFee - (totalBuyingCost + totalShipping + totalTransactionFee);
+    // Profit = Net Revenue - Buying Cost - Transaction Fees (clean net profit)
+    const totalProfit = totalNetSales - totalBuyingCost - totalTransactionFee;
 
     return {
       totalOrders,

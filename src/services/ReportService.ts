@@ -73,7 +73,14 @@ export const getSalesSummary = async (from: string, to: string) => {
       paymentStatus: "Paid",
     });
 
-    const totalRevenue = data.reduce((sum, o) => sum + (o.total || 0), 0);
+    // Calculate clean net sales revenue (standard way)
+    const totalRevenue = data.reduce((sum, o) => {
+      const orderTotal = o.total || 0;
+      const shippingFee = o.shippingFee || 0;
+      const orderFee = (o as any).fee || 0;
+      return sum + (orderTotal - shippingFee - orderFee);
+    }, 0);
+
     const totalOrders = data.length;
     const totalItems = data.reduce(
       (sum, o) => sum + (o.items?.reduce((s: any, i: any) => s + i.quantity, 0) || 0),
@@ -270,9 +277,15 @@ export const getProfitLossReport = async (from: string, to: string) => {
     let totalShippingRevenue = 0;
 
     for (const order of orders) {
-      totalRevenue += order.total || 0;
+      const orderTotal = order.total || 0;
+      const shippingFee = order.shippingFee || 0;
+      const orderFee = (order as any).fee || 0;
+
+      // Exclude customer collected shipping fee and transaction charges to get pure Net Sales (standard way)
+      const orderNetSale = orderTotal - shippingFee - orderFee;
+      totalRevenue += orderNetSale;
       totalDiscounts += (order.couponDiscount || 0) + (order.promotionDiscount || 0);
-      totalShippingRevenue += order.shippingFee || 0;
+      totalShippingRevenue += shippingFee;
 
       for (const item of order.items || []) {
         const product = await productRepository.findById(item.itemId);
@@ -348,8 +361,13 @@ export const getSalesPerformanceReport = async (
         };
       }
 
+      const orderTotal = order.total || 0;
+      const shippingFee = order.shippingFee || 0;
+      const orderFee = (order as any).fee || 0;
+      const netSale = orderTotal - shippingFee - orderFee;
+
       performanceMap[key].orders += 1;
-      performanceMap[key].sales += order.total || 0;
+      performanceMap[key].sales += netSale;
       performanceMap[key].items +=
         order.items?.reduce((s: any, i: any) => s + i.quantity, 0) || 0;
     });
@@ -614,7 +632,7 @@ export const getFinancialHealthReport = async (from: string, to: string) => {
       const orderTotal = order.total || 0;
       const shippingFee = order.shippingFee || 0;
       const orderFee = (order as any).fee || 0;
-      const discount = order.discount || 0;
+      const discount = (order.discount || 0) + (order.couponDiscount || 0) + (order.promotionDiscount || 0);
 
       // Per order calculations
       const orderNetSale = orderTotal - shippingFee - orderFee;
@@ -732,9 +750,15 @@ export const getSalesVsDiscount = async (
         ? dayjs(date).tz(SL_TZ).format("YYYY-MM-DD")
         : dayjs(date).tz(SL_TZ).format("YYYY-MM");
 
+    const orderTotal = order.total || 0;
+    const shippingFee = order.shippingFee || 0;
+    const orderFee = (order as any).fee || 0;
+    const netSale = orderTotal - shippingFee - orderFee;
+    const discount = (order.discount || 0) + (order.couponDiscount || 0) + (order.promotionDiscount || 0);
+
     const existing = groups.get(key) || { sales: 0, discount: 0 };
-    existing.sales += order.total || 0;
-    existing.discount += (order.discount || 0) + (order.promotionDiscount || 0);
+    existing.sales += netSale;
+    existing.discount += discount;
     groups.set(key, existing);
   });
 
