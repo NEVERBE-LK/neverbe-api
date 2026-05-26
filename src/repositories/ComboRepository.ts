@@ -26,14 +26,42 @@ export class ComboRepository extends BaseRepository<ComboProduct> {
    * Find all active combos
    */
   async findActive(): Promise<ComboProduct[]> {
+    const now = new Date();
     const snapshot = await this.collection
       .where("isActive", "==", true)
       .where("isDeleted", "!=", true)
       .get();
 
-    return snapshot.docs.map((doc) =>
-      this.serializeCombo({ id: doc.id, ...doc.data() })
-    );
+    return snapshot.docs
+      .filter((doc) => {
+        const data = doc.data();
+        const rawStart = data.startDate;
+        const rawEnd = data.endDate;
+
+        const startDate = rawStart
+          ? typeof rawStart.toDate === "function"
+            ? rawStart.toDate()
+            : rawStart instanceof Date
+            ? rawStart
+            : new Date(rawStart)
+          : null;
+          
+        const endDate = rawEnd
+          ? typeof rawEnd.toDate === "function"
+            ? rawEnd.toDate()
+            : rawEnd instanceof Date
+            ? rawEnd
+            : new Date(rawEnd)
+          : null;
+
+        if (startDate && now < startDate) return false;
+        if (endDate && now > endDate) return false;
+
+        return true;
+      })
+      .map((doc) =>
+        this.serializeCombo({ id: doc.id, ...doc.data() })
+      );
   }
 
   /**

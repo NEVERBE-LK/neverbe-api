@@ -37,31 +37,41 @@ export class PromotionRepository extends BaseRepository<Promotion> {
     const snapshot = await this.collection.get();
 
     return snapshot.docs
-      .map((doc) => this.serializePromotion(doc))
-      .filter((promo) => {
-        // 1. Status Check (support both legacy `status` and `isActive` boolean)
-        const isStatusActive = promo.status === "ACTIVE" || promo.status === undefined;
-        const isBoolActive = promo.isActive === true || promo.isActive === undefined;
-        
-        // If explicitly inactive via either field, filter out
-        if (promo.status === "INACTIVE" || promo.isActive === false) return false;
+      .filter((doc) => {
+        const data = doc.data()!;
         
         // Ensure not marked as deleted
-        if (promo.isDeleted === true) return false;
+        if (data.isDeleted === true) return false;
 
-        // 2. Date Check
-        const startDate = promo.startDate
-          ? new Date(promo.startDate as string)
-          : null;
-        const endDate = promo.endDate
-          ? new Date(promo.endDate as string)
+        // 1. Status Check (support both legacy `status` and `isActive` boolean)
+        if (data.status === "INACTIVE" || data.isActive === false) return false;
+
+        // 2. Date Check using raw Firestore Timestamps or raw Dates
+        const rawStart = data.startDate;
+        const rawEnd = data.endDate;
+
+        const startDate = rawStart
+          ? typeof rawStart.toDate === "function"
+            ? rawStart.toDate()
+            : rawStart instanceof Date
+            ? rawStart
+            : new Date(rawStart)
           : null;
           
+        const endDate = rawEnd
+          ? typeof rawEnd.toDate === "function"
+            ? rawEnd.toDate()
+            : rawEnd instanceof Date
+            ? rawEnd
+            : new Date(rawEnd)
+          : null;
+
         if (startDate && now < startDate) return false;
         if (endDate && now > endDate) return false;
-        
+
         return true;
-      });
+      })
+      .map((doc) => this.serializePromotion(doc));
   }
 
   /**
