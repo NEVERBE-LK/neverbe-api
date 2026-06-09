@@ -77,7 +77,7 @@ export const processExchange = async (request: ExchangeRequest, userId: string, 
 
   // Fetch replacement product data for bPrice
   const pIds = Array.from(new Set(replacementItems.map(i => i.itemId)));
-  const products = await productRepository.findByIds(pIds);
+  const products = await productRepository.findByIds(pIds, true);
   const productMap = new Map(products.map(p => [p.id, p]));
 
   replacementItems.forEach(rep => {

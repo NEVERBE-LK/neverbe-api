@@ -1,6 +1,6 @@
 import { BaseRepository } from "./BaseRepository";
 import { POSCartItem } from "@/services/POSService";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Transaction } from "firebase-admin/firestore";
 
 /**
  * PosCart Repository - handles POS cart data access
@@ -37,7 +37,7 @@ export class PosCartRepository extends BaseRepository<POSCartItem> {
       .where("userId", "==", filters.userId)
       .limit(1);
 
-    const snap = tx instanceof FirebaseFirestore.Transaction ? await tx.get(query) : await query.get();
+    const snap = tx instanceof Transaction ? await tx.get(query) : await query.get();
     return snap.empty ? null : snap.docs[0];
   }
 

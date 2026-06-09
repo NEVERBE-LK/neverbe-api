@@ -162,7 +162,9 @@ export const getOverviewByDateRange = async (
 
       if (Array.isArray(order.items)) {
         order.items.forEach((item: any) => {
-          const buyingPrice = item.bPrice ?? productPriceMap.get(item.itemId) ?? 0;
+          const buyingPrice = (item.bPrice !== undefined && item.bPrice !== null && item.bPrice > 0)
+            ? item.bPrice
+            : (productPriceMap.get(item.itemId) || 0);
           const quantity = item.quantity || 0;
           totalBuyingCost += buyingPrice * quantity;
         });
@@ -171,8 +173,17 @@ export const getOverviewByDateRange = async (
       totalFee += orderFee;
     });
 
-    // Profit = Net Revenue - Buying Cost - Transaction Fees (clean net profit)
-    const totalProfit = totalNetSales - totalBuyingCost - totalTransactionFee;
+    // Fetch expenses for operating expenses deduction
+    const expenses = await reportRepository.findExpensesForReport({
+      start: startDate,
+      end: endDate,
+      type: "expense",
+      status: "APPROVED",
+    });
+    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+    // Profit = Net Revenue + Order Fee - Buying Cost - Transaction Fee - Operating Expenses (fully aligned with P&L statement)
+    const totalProfit = totalNetSales + totalFee - totalBuyingCost - totalTransactionFee - totalExpenses;
 
     return {
       totalOrders,

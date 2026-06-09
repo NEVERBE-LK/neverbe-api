@@ -1,5 +1,6 @@
 import { BaseRepository } from "./BaseRepository";
 import type { PurchaseOrder } from "@/model/PurchaseOrder";
+import { Transaction } from "firebase-admin/firestore";
 
 /**
  * PurchaseOrder Repository - handles purchase order data access
@@ -88,7 +89,7 @@ export class PurchaseOrderRepository extends BaseRepository<PurchaseOrder> {
     tx?: FirebaseFirestore.Transaction | FirebaseFirestore.WriteBatch
   ): Promise<void> {
     const docRef = this.collection.doc(id);
-    const snap = tx instanceof FirebaseFirestore.Transaction ? await tx.get(docRef) : await docRef.get();
+    const snap = tx instanceof Transaction ? await tx.get(docRef) : await docRef.get();
     
     if (!snap.exists) throw new Error(`Purchase Order with ID ${id} not found`);
     const po = snap.data() as PurchaseOrder;

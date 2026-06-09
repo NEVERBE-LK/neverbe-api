@@ -424,7 +424,39 @@ export class ProductRepository extends BaseRepository<Product> {
     const startIndex = (page - 1) * size;
     const dataList = allProducts.slice(startIndex, startIndex + size);
 
-    return { dataList, total };
+    let totalStock = 0;
+    let activeProducts = 0;
+    let totalMarginSum = 0;
+    let marginCount = 0;
+
+    allProducts.forEach((p) => {
+      totalStock += p.totalStock || 0;
+      if (p.status === true) activeProducts++;
+      
+      const selling = p.sellingPrice || 0;
+      const discount = p.discount || 0;
+      const buying = p.buyingPrice || 0;
+      const finalPrice = selling * (1 - discount / 100);
+      if (finalPrice > 0 && buying > 0) {
+        const profit = finalPrice - buying;
+        const margin = (profit / finalPrice) * 100;
+        totalMarginSum += margin;
+        marginCount++;
+      }
+    });
+
+    const avgMargin = marginCount > 0 ? Math.round(totalMarginSum / marginCount) : 0;
+
+    return {
+      dataList,
+      total,
+      stats: {
+        totalProducts: total,
+        activeProducts,
+        totalStock,
+        avgMargin,
+      },
+    };
   }
 
   /**

@@ -23,8 +23,8 @@ export const getDailySaleReport = async (
 ) => {
   try {
     const data = await reportRepository.findOrdersForAnalysis({
-      start: parseToDayjs(from)?.toDate() || new Date(0),
-      end: parseToDayjs(to)?.toDate() || new Date(),
+      start: parseToDayjs(from)?.startOf("day").toDate() || new Date(0),
+      end: parseToDayjs(to)?.endOf("day").toDate() || new Date(),
       paymentStatus: status,
     });
 
@@ -68,8 +68,8 @@ export const getDailySaleReport = async (
 export const getSalesSummary = async (from: string, to: string) => {
   try {
     const data = await reportRepository.findOrdersForAnalysis({
-      start: parseToDayjs(from)?.toDate() || new Date(0),
-      end: parseToDayjs(to)?.toDate() || new Date(),
+      start: parseToDayjs(from)?.startOf("day").toDate() || new Date(0),
+      end: parseToDayjs(to)?.endOf("day").toDate() || new Date(),
       paymentStatus: "Paid",
     });
 
@@ -103,8 +103,8 @@ export const getSalesSummary = async (from: string, to: string) => {
 export const getBrandSalesReport = async (from: string, to: string) => {
   try {
     const data = await reportRepository.findOrdersForAnalysis({
-      start: parseToDayjs(from)?.toDate() || new Date(0),
-      end: parseToDayjs(to)?.toDate() || new Date(),
+      start: parseToDayjs(from)?.startOf("day").toDate() || new Date(0),
+      end: parseToDayjs(to)?.endOf("day").toDate() || new Date(),
       paymentStatus: "Paid",
     });
 
@@ -148,8 +148,8 @@ export const getCategorySalesReport = async (
 ) => {
   try {
     const data = await reportRepository.findOrdersForAnalysis({
-      start: parseToDayjs(from)?.toDate() || new Date(0),
-      end: parseToDayjs(to)?.toDate() || new Date(),
+      start: parseToDayjs(from)?.startOf("day").toDate() || new Date(0),
+      end: parseToDayjs(to)?.endOf("day").toDate() || new Date(),
       paymentStatus: status,
     });
 
@@ -165,7 +165,7 @@ export const getCategorySalesReport = async (
         (order.couponDiscount || 0) + (order.promotionDiscount || 0);
 
       for (const item of orderItems) {
-        const product = await productRepository.findById(item.itemId);
+        const product = await productRepository.findById(item.itemId, true);
 
         const category = product?.category || "Uncategorized";
 
@@ -212,8 +212,8 @@ export const getCategorySalesReport = async (
 export const getPaymentMethodReport = async (from: string, to: string) => {
   try {
     const data = await reportRepository.findOrdersForAnalysis({
-      start: parseToDayjs(from)?.toDate() || new Date(0),
-      end: parseToDayjs(to)?.toDate() || new Date(),
+      start: parseToDayjs(from)?.startOf("day").toDate() || new Date(0),
+      end: parseToDayjs(to)?.endOf("day").toDate() || new Date(),
       paymentStatus: "Paid",
     });
 
@@ -261,8 +261,8 @@ export const getInventoryReport = async () => {
 
 export const getProfitLossReport = async (from: string, to: string) => {
   try {
-    const start = parseToDayjs(from)?.toDate() || new Date(0);
-    const end = parseToDayjs(to)?.toDate() || new Date();
+    const start = parseToDayjs(from)?.startOf("day").toDate() || new Date(0);
+    const end = parseToDayjs(to)?.endOf("day").toDate() || new Date();
 
     // Fetch orders for revenue and COGS
     const orders = await reportRepository.findOrdersForAnalysis({
@@ -288,7 +288,7 @@ export const getProfitLossReport = async (from: string, to: string) => {
       totalShippingRevenue += shippingFee;
 
       for (const item of order.items || []) {
-        const product = await productRepository.findById(item.itemId);
+        const product = await productRepository.findById(item.itemId, true);
         totalCOGS += (product?.buyingPrice || 0) * item.quantity;
       }
     }
@@ -604,8 +604,8 @@ export const getCustomerLoyaltyReport = async (
 
 export const getFinancialHealthReport = async (from: string, to: string) => {
   try {
-    const start = parseToDayjs(from)?.toDate() || new Date(0);
-    const end = parseToDayjs(to)?.toDate() || new Date();
+    const start = parseToDayjs(from)?.startOf("day").toDate() || new Date(0);
+    const end = parseToDayjs(to)?.endOf("day").toDate() || new Date();
 
     const orders = await reportRepository.findOrdersForAnalysis({
       start,
@@ -644,7 +644,7 @@ export const getFinancialHealthReport = async (from: string, to: string) => {
       totalOrderFee += orderFee;
 
       for (const item of order.items || []) {
-        const product = await productRepository.findById(item.itemId);
+        const product = await productRepository.findById(item.itemId, true);
         totalProductCost += (product?.buyingPrice || 0) * item.quantity;
       }
     }
@@ -699,8 +699,8 @@ export const getTopSellingProducts = async (
   to: string,
   limit: number = 10,
 ) => {
-  const start = parseToDayjs(from)?.toDate() || new Date(0);
-  const end = parseToDayjs(to)?.toDate() || new Date();
+  const start = parseToDayjs(from)?.startOf("day").toDate() || new Date(0);
+  const end = parseToDayjs(to)?.endOf("day").toDate() || new Date();
   const orders = await orderRepository.findPaidOrdersInDateRange(start, end);
 
   const productMap = new Map<
@@ -737,8 +737,8 @@ export const getSalesVsDiscount = async (
   to: string,
   groupBy: "day" | "month" = "day",
 ) => {
-  const start = parseToDayjs(from)?.toDate() || new Date(0);
-  const end = parseToDayjs(to)?.toDate() || new Date();
+  const start = parseToDayjs(from)?.startOf("day").toDate() || new Date(0);
+  const end = parseToDayjs(to)?.endOf("day").toDate() || new Date();
   const orders = await orderRepository.findPaidOrdersInDateRange(start, end);
 
   const groups = new Map<string, { sales: number; discount: number }>();
@@ -771,8 +771,8 @@ export const getSalesVsDiscount = async (
  * Get tax report summary
  */
 export const getTaxReport = async (from: string, to: string) => {
-  const start = parseToDayjs(from)?.toDate() || new Date(0);
-  const end = parseToDayjs(to)?.toDate() || new Date();
+  const start = parseToDayjs(from)?.startOf("day").toDate() || new Date(0);
+  const end = parseToDayjs(to)?.endOf("day").toDate() || new Date();
   const orders = await orderRepository.findPaidOrdersInDateRange(start, end);
 
   let totalTax = 0;
@@ -920,11 +920,125 @@ export const getExpenseReport = async (from: string, to: string) => {
   return formatListDates(expenses, ["date", "createdAt", "updatedAt"]);
 };
 
-/**
- * Get profit and loss statement
- */
-export const getProfitLossStatement = async (from: string, to: string) => {
-  return await getFinancialHealthReport(from, to);
+export const getProfitLossStatement = async (from: string, to: string): Promise<any> => {
+  try {
+    const start = parseToDayjs(from)?.startOf("day").toDate() || new Date(0);
+    const end = parseToDayjs(to)?.endOf("day").toDate() || new Date();
+
+    const orders = await reportRepository.findOrdersForAnalysis({
+      start,
+      end,
+      paymentStatus: "Paid",
+    });
+
+    const expenses = await reportRepository.findExpensesForReport({
+      start,
+      end,
+      type: "expense",
+      status: "APPROVED",
+    });
+
+    let grossSales = 0;
+    let totalDiscounts = 0;
+    let netSales = 0;
+    let shippingIncome = 0;
+    let otherIncome = 0;
+
+    let productCost = 0;
+    let shippingCost = 0;
+
+    let transactionFees = 0;
+
+    for (const order of orders) {
+      const orderTotal = order.total || 0;
+      const shippingFee = order.shippingFee || 0;
+      const orderFee = (order as any).fee || 0;
+      const txFee = order.transactionFeeCharge || 0;
+
+      const itemDiscounts = Array.isArray(order.items)
+        ? order.items.reduce((sum, item) => sum + (item.discount || 0), 0)
+        : 0;
+      const orderDiscount = order.discount || 0;
+      const promoDiscount = order.promotionDiscount || 0;
+      const couponDiscount = order.couponDiscount || 0;
+      const discount = orderDiscount + promoDiscount + couponDiscount + itemDiscounts;
+
+      const orderNetSales = orderTotal - shippingFee - orderFee;
+      const orderGrossSales = orderNetSales + discount;
+
+      netSales += orderNetSales;
+      grossSales += orderGrossSales;
+      totalDiscounts += discount;
+      shippingIncome += shippingFee;
+      otherIncome += orderFee;
+
+      shippingCost += shippingFee;
+      transactionFees += txFee;
+
+      for (const item of order.items || []) {
+        const product = await productRepository.findById(item.itemId, true);
+        productCost += (product?.buyingPrice || 0) * item.quantity;
+      }
+    }
+
+    const totalRevenue = netSales + shippingIncome + otherIncome;
+    const totalCOGS = productCost + shippingCost;
+    const grossProfit = totalRevenue - totalCOGS;
+    const grossProfitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+
+    const categoryMap: Record<string, number> = {};
+    expenses.forEach((e) => {
+      const cat = e.category || "Uncategorized";
+      categoryMap[cat] = (categoryMap[cat] || 0) + (e.amount || 0);
+    });
+    const byCategory = Object.entries(categoryMap).map(([category, amount]) => ({
+      category,
+      amount,
+    }));
+    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+    const operatingIncome = grossProfit - totalExpenses;
+
+    const otherFees = 0;
+    const totalOther = transactionFees + otherFees;
+
+    const netProfit = operatingIncome - totalOther;
+    const netProfitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+    return {
+      period: { from, to },
+      revenue: {
+        grossSales,
+        discounts: totalDiscounts,
+        netSales,
+        shippingIncome,
+        otherIncome,
+        totalRevenue,
+      },
+      costOfGoodsSold: {
+        productCost,
+        shippingCost,
+        totalCOGS,
+      },
+      grossProfit,
+      grossProfitMargin,
+      operatingExpenses: {
+        byCategory,
+        totalExpenses,
+      },
+      operatingIncome,
+      otherExpenses: {
+        transactionFees,
+        otherFees,
+        totalOther,
+      },
+      netProfit,
+      netProfitMargin,
+    };
+  } catch (error: any) {
+    console.error("[ReportService] Profit/Loss statement error:", error);
+    throw error;
+  }
 };
 
 /**
@@ -1007,8 +1121,8 @@ export const getSalesByPaymentMethod = async (from: string, to: string) => {
  */
 export const getRefundsAndReturns = async (from?: string, to?: string) => {
   try {
-    const start = from ? parseToDayjs(from)?.toDate() || new Date(0) : new Date(0);
-    const end = to ? parseToDayjs(to)?.toDate() || new Date() : new Date();
+    const start = from ? parseToDayjs(from)?.startOf("day").toDate() || new Date(0) : new Date(0);
+    const end = to ? parseToDayjs(to)?.endOf("day").toDate() || new Date() : new Date();
 
     const orders = await reportRepository.findOrdersForAnalysis({
       start,

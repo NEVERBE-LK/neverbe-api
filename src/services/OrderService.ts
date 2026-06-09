@@ -1,4 +1,7 @@
 import { orderRepository } from "@/repositories/OrderRepository";
+import { inventoryRepository } from "@/repositories/InventoryRepository";
+import { productRepository } from "@/repositories/ProductRepository";
+import { FieldValue } from "firebase-admin/firestore";
 import { Order } from "@/model/Order";
 import {
   updateOrAddOrderHash,
@@ -90,21 +93,83 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     throw new AppError(`Order with ID ${orderId} is already refunded can't proceed with update`, 400);
   }
 
-  const orderUpdate: Partial<Order> = {
-    paymentStatus: order.paymentStatus,
-    status: order.status,
-    ...(order.customer && {
-      customer: {
+  // Use a transaction to perform all stock adjustments and order updates safely
+  await orderRepository.runTransaction(async (tx) => {
+    const docRef = orderRepository.getDocRef(orderId);
+    const orderDoc = await tx.get(docRef);
+    if (!orderDoc.exists) throw new AppError(`Order with ID ${orderId} not found`, 404);
+    const currentOrder = orderDoc.data() as Order;
+
+    const stockId = currentOrder.stockId;
+
+    // --- INVENTORY STOCK ADJUSTMENT ---
+    if (stockId) {
+      // 1. Map current active quantities (0 if order was already Cancelled)
+      const oldQtys: Record<string, number> = {};
+      const oldStatus = (currentOrder.status || "Pending").toLowerCase();
+      if (oldStatus !== "cancelled" && Array.isArray(currentOrder.items)) {
+        currentOrder.items.forEach((item) => {
+          const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
+          oldQtys[key] = (oldQtys[key] || 0) + item.quantity;
+        });
+      }
+
+      // 2. Map target active quantities (0 if order is being Cancelled)
+      const newQtys: Record<string, number> = {};
+      const newStatus = (order.status || "Pending").toLowerCase();
+      if (newStatus !== "cancelled" && Array.isArray(order.items)) {
+        order.items.forEach((item) => {
+          const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
+          newQtys[key] = (newQtys[key] || 0) + item.quantity;
+        });
+      }
+
+      // 3. Compute net differences and apply stock changes
+      const allKeys = new Set([...Object.keys(oldQtys), ...Object.keys(newQtys)]);
+
+      for (const key of allKeys) {
+        const [productId, variantId, size] = key.split("_");
+        const oldQty = oldQtys[key] || 0;
+        const newQty = newQtys[key] || 0;
+        const diff = newQty - oldQty;
+
+        if (diff > 0) {
+          // Selling more -> deduct stock from inventory, update product totalStock
+          await inventoryRepository.deductStock(tx, productId, variantId || null, size, stockId, diff);
+          await productRepository.updateTotalStock(tx, productId, diff);
+        } else if (diff < 0) {
+          // Returning stock -> restore stock to inventory, update product totalStock
+          await inventoryRepository.restoreStock(tx, productId, variantId || null, size, stockId, Math.abs(diff));
+          await productRepository.updateTotalStock(tx, productId, diff);
+        }
+      }
+    }
+
+    // --- UPDATE ORDER DOCUMENT ---
+    const orderUpdate: any = {
+      paymentStatus: order.paymentStatus,
+      status: order.status,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (order.customer) {
+      orderUpdate.customer = {
+        ...currentOrder.customer,
         ...order.customer,
-        updatedAt: getNowSL().toDate(),
-      },
-    }),
-  };
+        updatedAt: new Date(),
+      };
+    }
 
-  if (order.trackingNumber !== undefined) orderUpdate.trackingNumber = order.trackingNumber;
-  if (order.courier !== undefined) orderUpdate.courier = order.courier;
+    if (order.trackingNumber !== undefined) orderUpdate.trackingNumber = order.trackingNumber;
+    if (order.courier !== undefined) orderUpdate.courier = order.courier;
+    if (order.items !== undefined) orderUpdate.items = order.items;
+    if (order.total !== undefined) orderUpdate.total = order.total;
+    if (order.discount !== undefined) orderUpdate.discount = order.discount;
+    if (order.shippingFee !== undefined) orderUpdate.shippingFee = order.shippingFee;
+    if (order.paymentReceived !== undefined) orderUpdate.paymentReceived = order.paymentReceived;
 
-  await orderRepository.update(orderId, orderUpdate);
+    tx.update(docRef, orderUpdate);
+  });
 
   const updatedOrder = await orderRepository.findById(orderId);
   if (!updatedOrder) throw new AppError(`Order with ID ${orderId} not found after update`, 404);

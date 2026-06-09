@@ -104,13 +104,15 @@ export const addProducts = async (product: Partial<Product>, file: File) => {
   // Remove separate gender field from DB writes
   delete mergedProduct.gender;
 
-  return await productRepository.create(id, {
+  await productRepository.create(id, {
     ...mergedProduct,
     thumbnail,
     nameLower: mergedProduct.name?.toLowerCase(),
     tags: finalTags,
     availableSizes: Array.from(allSizes),
   });
+
+  return await getProductById(id);
 };
 
 export const updateProduct = async (
@@ -151,13 +153,15 @@ export const updateProduct = async (
   // Remove separate gender field from DB writes
   delete mergedProduct.gender;
 
-  return await productRepository.update(id, {
+  await productRepository.update(id, {
     ...mergedProduct,
     thumbnail,
     nameLower: mergedProduct.name?.toLowerCase(),
     tags: finalTags,
     availableSizes: Array.from(allSizes),
   });
+
+  return await getProductById(id);
 };
 
 /**
@@ -199,7 +203,7 @@ export const getProducts = async (
   status?: boolean,
   listing?: boolean,
 ) => {
-  const { dataList, total } = await productRepository.findAllPaginated({
+  const { dataList, total, stats } = await productRepository.findAllPaginated({
     page: pageNumber, size, search, brand, category, status, listing,
   });
 
@@ -213,7 +217,7 @@ export const getProducts = async (
     };
   });
 
-  return { dataList: processed, rowCount: total };
+  return { dataList: processed, rowCount: total, stats };
 };
 
 export const getProductById = async (id: string): Promise<Product> => {
@@ -340,7 +344,7 @@ export const getPaymentMethods = async () => settingsRepository.findPaymentMetho
 export const getProductDropdown = async () => {
   const { dataList } = await productRepository.findAllPaginated({ size: 1000, status: true, listing: true });
   return dataList.map(p => ({
-    id: p.id, label: p.name, buyingPrice: p.buyingPrice || 0,
+    id: p.id, label: p.name, buyingPrice: p.buyingPrice || 0, sellingPrice: p.sellingPrice || 0,
     variants: p.variants || [], availableSizes: p.availableSizes || [],
   }));
 };

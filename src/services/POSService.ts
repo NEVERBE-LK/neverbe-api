@@ -227,7 +227,7 @@ export const createPOSOrder = async (order: Partial<Order>, userId: string) => {
 
   try {
     const productIds = order.items.map((i) => i.itemId);
-    const products = await productRepository.findByIds(productIds);
+    const products = await productRepository.findByIds(productIds, true);
     const productMap = new Map(products.map((p) => [p.id, p]));
 
     order.items = order.items.map((item) => ({

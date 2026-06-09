@@ -69,9 +69,9 @@ export const addWebOrder = async (order: Partial<Order>) => {
   const stockId = erpSettings?.onlineStockId;
   if (!stockId) throw new AppError("Online stock location not configured", 500);
 
-  // Fetch product data in batch
+  // Fetch product data in batch (including sensitive data for bPrice)
   const productIds = order.items.map((i) => i.itemId);
-  const products = await productRepository.findByIds(productIds);
+  const products = await productRepository.findByIds(productIds, true);
   const productMap = new Map(products.map((p) => [p.id, p]));
 
   // Business Logic: Enrich items and calculate discounts

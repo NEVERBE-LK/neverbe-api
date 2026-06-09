@@ -81,7 +81,7 @@ export const addInventory = async (
     const docId = `inv-${nanoid(10)}`;
     const newItem = await inventoryRepository.create(docId, itemData);
     await updateProductStockCount(productId);
-    return newItem as any;
+    return formatEntityDates(newItem) as any;
   }
 };
 
@@ -97,7 +97,11 @@ export const updateInventoryQuantity = async (
   await inventoryRepository.updateQuantity(inventoryId, newQuantity);
   await updateProductStockCount(existing.productId);
   
-  return { ...existing, id: inventoryId, quantity: Number(newQuantity) } as any;
+  return formatEntityDates({
+    ...existing,
+    id: inventoryId,
+    quantity: Number(newQuantity)
+  }) as any;
 };
 
 export const updateProductStockCount = async (productId: string): Promise<void> => {
@@ -131,7 +135,7 @@ export const addBulkInventory = async (
   sizeQuantities: { size: string; quantity: number }[]
 ): Promise<{ success: number; failed: number; errors: string[] }> => {
   const results = { success: 0, failed: 0, errors: [] as string[] };
-  const validEntries = sizeQuantities.filter((sq) => sq.quantity > 0);
+  const validEntries = sizeQuantities.filter((sq) => sq.quantity >= 0);
 
   for (const { size, quantity } of validEntries) {
     try {

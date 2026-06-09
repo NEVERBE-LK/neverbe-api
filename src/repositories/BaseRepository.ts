@@ -21,6 +21,13 @@ export abstract class BaseRepository<T> {
   }
 
   /**
+   * Get document reference for transactions
+   */
+  getDocRef(id: string): FirebaseFirestore.DocumentReference {
+    return this.collection.doc(id);
+  }
+
+  /**
    * Get base query with standard active filters (isDeleted, status)
    */
   protected getActiveQuery(): Query {
