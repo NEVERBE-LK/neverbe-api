@@ -54,6 +54,7 @@ export const getInventory = async (
       stockId: item.stockId,
       stockName: stock?.name || "Unknown Stock",
       quantity: item.quantity,
+      thumbnail: variant?.images?.[0]?.url || product?.thumbnail?.url || "",
     };
   });
 
