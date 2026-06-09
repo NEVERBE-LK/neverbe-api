@@ -10,17 +10,17 @@ import { formatEntityDates, formatListDates } from "./UtilService";
 
 export const getAllPermissions = (): Permission[] => {
   return [
-    // System
-    { key: "manage_roles", label: "Manage Roles & Permissions", group: "System" },
+    // Security
+    { key: "manage_roles", label: "Manage Roles & Permissions", group: "Security" },
 
     // Dashboard
     { key: "view_dashboard", label: "View Dashboard", group: "Dashboard" },
 
-    // Users
-    { key: "view_users", label: "View Users", group: "Users" },
-    { key: "create_users", label: "Create Users", group: "Users" },
-    { key: "update_users", label: "Update Users", group: "Users" },
-    { key: "delete_users", label: "Delete Users", group: "Users" },
+    // Users (under Security group now)
+    { key: "view_users", label: "View Users", group: "Security" },
+    { key: "create_users", label: "Create Users", group: "Security" },
+    { key: "update_users", label: "Update Users", group: "Security" },
+    { key: "delete_users", label: "Delete Users", group: "Security" },
 
     // Master Data
     { key: "view_master_data", label: "View Master Data", group: "Master Data" },
