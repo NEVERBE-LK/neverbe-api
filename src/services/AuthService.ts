@@ -211,12 +211,19 @@ export const verifyUserCredentials = async (
         throw new AppError("Firebase Web API key is not configured on the server", 500);
       }
 
+      const defaultReferer = process.env.ERP_BASE_URL || "https://erp.neverbe.lk";
+
       const res = await axios.post(
         `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
         {
           email: resolvedEmail,
           password,
           returnSecureToken: true,
+        },
+        {
+          headers: {
+            Referer: defaultReferer,
+          },
         }
       );
 
