@@ -410,6 +410,8 @@ const renderPasswordResetSMS = async (otp: string): Promise<string> => {
     let template = await settingsRepository.getSmsTemplate("PASSWORD_RESET_OTP");
     if (!template) {
       template = {
+        name: "Password Reset OTP",
+        variables: ["otp"],
         en: "Your NEVERBE password reset verification code is {{otp}}. Valid for 5 minutes.",
         si: "ඔබගේ NEVERBE මුරපදය නැවත සැකසීමේ කේතය {{otp}} වේ. මෙය විනාඩි 5ක් සඳහා වලංගු වේ.",
         ta: "உங்களது NEVERBE கடவுச்சொல் மீட்டமைப்பு குறியீடு {{otp}} ஆகும். இது 5 நிமிடங்களுக்கு செல்லுபடியாகும்.",
