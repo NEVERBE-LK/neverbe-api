@@ -2,6 +2,7 @@ import { orderRepository } from "@/repositories/OrderRepository";
 import { productRepository } from "@/repositories/ProductRepository";
 import { inventoryRepository } from "@/repositories/InventoryRepository";
 import { promotionRepository } from "@/repositories/PromotionRepository";
+import { FieldValue } from "firebase-admin/firestore";
 import { settingsRepository } from "@/repositories/SettingsRepository";
 import {
   sendOrderConfirmedEmail,
@@ -154,11 +155,28 @@ export const addWebOrder = async (order: Partial<Order>) => {
     serverShippingFee = 0;
   }
 
+  // Pre-fetch inventory refs before the transaction to comply with Firestore read-before-write rules
+  const invRefs: Record<string, FirebaseFirestore.DocumentReference | null> = {};
+  if (order.items) {
+    for (const item of order.items) {
+      const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
+      invRefs[key] = await inventoryRepository.findBySpecs(item.itemId, item.variantId || null, item.size, stockId);
+    }
+  }
+
   // Transaction for stock deduction and order save
   try {
     await orderRepository.runTransaction(async (tx) => {
-      for (const item of order.items!) {
-        await inventoryRepository.deductStock(tx, item.itemId, item.variantId, item.size, stockId, item.quantity);
+      if (order.items) {
+        for (const item of order.items) {
+          const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
+          const invRef = invRefs[key];
+          if (!invRef) throw new AppError(`Inventory item not found for ${item.name}`, 404);
+          tx.update(invRef, {
+            quantity: FieldValue.increment(-item.quantity),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
       }
 
       const now = new Date();
@@ -178,8 +196,8 @@ export const addWebOrder = async (order: Partial<Order>) => {
         updatedAt: now as any,
         customer: {
           ...order.customer,
-          updatedAt: now,
-          createdAt: now,
+          updatedAt: now as any,
+          createdAt: now as any,
         },
       } as Order;
 

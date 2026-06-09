@@ -93,6 +93,44 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     throw new AppError(`Order with ID ${orderId} is already refunded can't proceed with update`, 400);
   }
 
+  const stockId = existingOrder.stockId;
+
+  // 1. Map current active quantities (0 if order was already Cancelled)
+  const oldQtys: Record<string, number> = {};
+  const oldStatusForStock = (existingOrder.status || "Pending").toLowerCase();
+  if (oldStatusForStock !== "cancelled" && Array.isArray(existingOrder.items)) {
+    existingOrder.items.forEach((item) => {
+      const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
+      oldQtys[key] = (oldQtys[key] || 0) + item.quantity;
+    });
+  }
+
+  // 2. Map target active quantities (0 if order is being Cancelled)
+  const newQtys: Record<string, number> = {};
+  const newStatusForStock = (order.status || "Pending").toLowerCase();
+  if (newStatusForStock !== "cancelled" && Array.isArray(order.items)) {
+    order.items.forEach((item) => {
+      const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
+      newQtys[key] = (newQtys[key] || 0) + item.quantity;
+    });
+  }
+
+  // 3. Compute net differences
+  const allKeys = new Set([...Object.keys(oldQtys), ...Object.keys(newQtys)]);
+
+  // 4. Pre-fetch inventory refs before the transaction to comply with Firestore read-before-write rules
+  const invRefs: Record<string, FirebaseFirestore.DocumentReference | null> = {};
+  if (stockId) {
+    for (const key of allKeys) {
+      const [productId, variantId, size] = key.split("_");
+      const oldQty = oldQtys[key] || 0;
+      const newQty = newQtys[key] || 0;
+      if (newQty - oldQty !== 0) {
+        invRefs[key] = await inventoryRepository.findBySpecs(productId, variantId || null, size, stockId);
+      }
+    }
+  }
+
   // Use a transaction to perform all stock adjustments and order updates safely
   await orderRepository.runTransaction(async (tx) => {
     const docRef = orderRepository.getDocRef(orderId);
@@ -100,47 +138,63 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     if (!orderDoc.exists) throw new AppError(`Order with ID ${orderId} not found`, 404);
     const currentOrder = orderDoc.data() as Order;
 
-    const stockId = currentOrder.stockId;
-
-    // --- INVENTORY STOCK ADJUSTMENT ---
+    // --- READ ALL PRODUCTS FIRST (before any writes) ---
+    const productRefs: Record<string, FirebaseFirestore.DocumentSnapshot> = {};
     if (stockId) {
-      // 1. Map current active quantities (0 if order was already Cancelled)
-      const oldQtys: Record<string, number> = {};
-      const oldStatus = (currentOrder.status || "Pending").toLowerCase();
-      if (oldStatus !== "cancelled" && Array.isArray(currentOrder.items)) {
-        currentOrder.items.forEach((item) => {
-          const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
-          oldQtys[key] = (oldQtys[key] || 0) + item.quantity;
-        });
+      const uniqueProductIds = new Set<string>();
+      for (const key of allKeys) {
+        const [productId] = key.split("_");
+        const oldQty = oldQtys[key] || 0;
+        const newQty = newQtys[key] || 0;
+        if (newQty - oldQty !== 0) {
+          uniqueProductIds.add(productId);
+        }
       }
 
-      // 2. Map target active quantities (0 if order is being Cancelled)
-      const newQtys: Record<string, number> = {};
-      const newStatus = (order.status || "Pending").toLowerCase();
-      if (newStatus !== "cancelled" && Array.isArray(order.items)) {
-        order.items.forEach((item) => {
-          const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
-          newQtys[key] = (newQtys[key] || 0) + item.quantity;
-        });
+      for (const productId of uniqueProductIds) {
+        const pRef = productRepository.getDocRef(productId);
+        productRefs[productId] = await tx.get(pRef);
       }
+    }
 
-      // 3. Compute net differences and apply stock changes
-      const allKeys = new Set([...Object.keys(oldQtys), ...Object.keys(newQtys)]);
-
+    // --- WRITE ALL CHANGES (after all reads) ---
+    if (stockId) {
       for (const key of allKeys) {
         const [productId, variantId, size] = key.split("_");
         const oldQty = oldQtys[key] || 0;
         const newQty = newQtys[key] || 0;
         const diff = newQty - oldQty;
 
-        if (diff > 0) {
-          // Selling more -> deduct stock from inventory, update product totalStock
-          await inventoryRepository.deductStock(tx, productId, variantId || null, size, stockId, diff);
-          await productRepository.updateTotalStock(tx, productId, diff);
-        } else if (diff < 0) {
-          // Returning stock -> restore stock to inventory, update product totalStock
-          await inventoryRepository.restoreStock(tx, productId, variantId || null, size, stockId, Math.abs(diff));
-          await productRepository.updateTotalStock(tx, productId, diff);
+        if (diff !== 0) {
+          const invRef = invRefs[key];
+          if (diff > 0) {
+            // Deduct stock
+            if (!invRef) throw new AppError("Inventory item not found", 404);
+            tx.update(invRef, {
+              quantity: FieldValue.increment(-diff),
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          } else if (diff < 0) {
+            // Restore stock
+            if (invRef) {
+              tx.update(invRef, {
+                quantity: FieldValue.increment(Math.abs(diff)),
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+            }
+          }
+
+          // Update product totalStock
+          const pSnap = productRefs[productId];
+          if (pSnap && pSnap.exists) {
+            const data = pSnap.data() as any;
+            const newTotal = (data.totalStock ?? 0) - diff;
+            tx.update(pSnap.ref, {
+              totalStock: newTotal,
+              inStock: newTotal > 0,
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          }
         }
       }
     }
@@ -166,6 +220,8 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     if (order.total !== undefined) orderUpdate.total = order.total;
     if (order.discount !== undefined) orderUpdate.discount = order.discount;
     if (order.shippingFee !== undefined) orderUpdate.shippingFee = order.shippingFee;
+    if (order.fee !== undefined) orderUpdate.fee = order.fee;
+    if (order.transactionFeeCharge !== undefined) orderUpdate.transactionFeeCharge = order.transactionFeeCharge;
     if (order.paymentReceived !== undefined) orderUpdate.paymentReceived = order.paymentReceived;
 
     tx.update(docRef, orderUpdate);

@@ -2,6 +2,7 @@ import { orderRepository } from "@/repositories/OrderRepository";
 import { exchangeRepository } from "@/repositories/ExchangeRepository";
 import { inventoryRepository } from "@/repositories/InventoryRepository";
 import { productRepository } from "@/repositories/ProductRepository";
+import { FieldValue } from "firebase-admin/firestore";
 import { ExchangeRecord, ExchangeRequest } from "@/model/ExchangeRecord";
 import { Order } from "@/model/Order";
 import { AppError } from "@/utils/apiResponse";
@@ -92,15 +93,53 @@ export const processExchange = async (request: ExchangeRequest, userId: string, 
   if (priceDifference < 0) throw new AppError("Refunds not allowed in exchange", 400);
   if (priceDifference > 0 && !paymentMethod) throw new AppError("Payment method required for balance", 400);
 
+  // Pre-fetch all specs/inventory doc references OUTSIDE/BEFORE the transaction to comply with Firestore read-before-write rules
+  const retRefs: Record<string, FirebaseFirestore.DocumentReference | null> = {};
+  const repRefs: Record<string, FirebaseFirestore.DocumentReference | null> = {};
+
+  for (const ret of returnedItems) {
+    const key = `${ret.itemId}_${ret.variantId || ""}_${ret.size}`;
+    retRefs[key] = await inventoryRepository.findBySpecs(ret.itemId, ret.variantId || null, ret.size, stockId);
+  }
+
+  for (const rep of replacementItems) {
+    const key = `${rep.itemId}_${rep.variantId || ""}_${rep.size}`;
+    repRefs[key] = await inventoryRepository.findBySpecs(rep.itemId, rep.variantId || null, rep.size, stockId);
+  }
+
   const exchangeId = `EXC-${nanoid(8).toUpperCase()}`;
 
   await exchangeRepository.runTransaction(async (tx) => {
     // 1. Update Inventory
     for (const ret of returnedItems) {
-      await inventoryRepository.upsertStock(tx, ret.itemId, ret.variantId || null, ret.size, stockId, ret.quantity);
+      const key = `${ret.itemId}_${ret.variantId || ""}_${ret.size}`;
+      const invRef = retRefs[key];
+      if (invRef) {
+        tx.update(invRef, {
+          quantity: FieldValue.increment(ret.quantity),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      } else {
+        const newRef = inventoryRepository.getDocRef();
+        tx.set(newRef, {
+          productId: ret.itemId,
+          variantId: ret.variantId || null,
+          size: ret.size,
+          stockId,
+          quantity: ret.quantity,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
     }
     for (const rep of replacementItems) {
-      await inventoryRepository.deductStock(tx, rep.itemId, rep.variantId || null, rep.size, stockId, rep.quantity);
+      const key = `${rep.itemId}_${rep.variantId || ""}_${rep.size}`;
+      const invRef = repRefs[key];
+      if (!invRef) throw new AppError(`Inventory item not found for replacement item ${rep.name}`, 404);
+      tx.update(invRef, {
+        quantity: FieldValue.increment(-rep.quantity),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     }
 
     // 2. Update Order Items

@@ -23,8 +23,8 @@ export abstract class BaseRepository<T> {
   /**
    * Get document reference for transactions
    */
-  getDocRef(id: string): FirebaseFirestore.DocumentReference {
-    return this.collection.doc(id);
+  getDocRef(id?: string): FirebaseFirestore.DocumentReference {
+    return id ? this.collection.doc(id) : this.collection.doc();
   }
 
   /**
