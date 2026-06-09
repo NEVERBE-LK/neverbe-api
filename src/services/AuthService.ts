@@ -6,8 +6,10 @@ import { roleRepository } from "@/repositories/RoleRepository";
 import { toSafeLocaleString, getNowSL, parseToDayjs } from "./UtilService";
 import { notificationRepository } from "@/repositories/NotificationRepository";
 import { settingsRepository } from "@/repositories/SettingsRepository";
+import { userRepository } from "@/repositories/UserRepository";
 import { MailService } from "@/services/MailService";
 import crypto from "crypto";
+import axios from "axios";
 
 
 /**
@@ -179,15 +181,57 @@ export const updateUser = async (
 };
 
 export const verifyUserCredentials = async (
-  token: string,
-  requiredPermission?: string
+  token?: string,
+  requiredPermission?: string,
+  emailOrUsername?: string,
+  password?: string
 ): Promise<{ success: boolean; user?: { email: string | undefined; role: string } }> => {
-  try {
-    // Verify the ID token using Firebase Admin SDK
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const uid = decodedToken.uid;
+  let verifiedEmail = "";
+  let decodedToken: any = null;
 
-    // Fetch user details to ensure account is not disabled
+  try {
+    if (password && emailOrUsername) {
+      // 1. Resolve email
+      let resolvedEmail = emailOrUsername;
+      
+      // Look up in users Firestore collection
+      let querySnapshot = await userRepository.collection.where("email", "==", emailOrUsername).limit(1).get();
+      if (querySnapshot.empty) {
+        querySnapshot = await userRepository.collection.where("username", "==", emailOrUsername).limit(1).get();
+      }
+
+      if (!querySnapshot.empty) {
+        const userData = querySnapshot.docs[0].data();
+        resolvedEmail = userData.email;
+      }
+
+      // 2. Sign in with password via Firebase REST API
+      const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+      if (!apiKey) {
+        throw new AppError("Firebase Web API key is not configured on the server", 500);
+      }
+
+      const res = await axios.post(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+        {
+          email: resolvedEmail,
+          password,
+          returnSecureToken: true,
+        }
+      );
+
+      const idToken = res.data.idToken;
+      decodedToken = await adminAuth.verifyIdToken(idToken);
+      verifiedEmail = resolvedEmail;
+    } else if (token) {
+      decodedToken = await adminAuth.verifyIdToken(token);
+      const authUser = await adminAuth.getUser(decodedToken.uid);
+      verifiedEmail = authUser.email || "";
+    } else {
+      throw new AppError("Missing credentials or authorization token", 400);
+    }
+
+    const uid = decodedToken.uid;
     const authUser = await adminAuth.getUser(uid);
     if (authUser.disabled) {
       throw new AppError("User account is disabled", 403);
@@ -197,7 +241,7 @@ export const verifyUserCredentials = async (
 
     // Admin has all permissions
     if (role === "admin") {
-      return { success: true, user: { email: authUser.email, role } };
+      return { success: true, user: { email: verifiedEmail, role } };
     }
 
     if (requiredPermission) {
@@ -208,11 +252,11 @@ export const verifyUserCredentials = async (
       }
     }
 
-    return { success: true, user: { email: authUser.email, role } };
+    return { success: true, user: { email: verifiedEmail, role } };
   } catch (error: any) {
     if (error instanceof AppError) throw error;
-    console.error("Token verification failed:", error);
-    throw new AppError("Invalid or expired authorization token", 401);
+    console.error("Credentials/Token verification failed:", error.response?.data || error.message);
+    throw new AppError("Invalid or expired credentials", 401);
   }
 };
 
