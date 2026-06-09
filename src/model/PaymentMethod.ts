@@ -6,6 +6,8 @@ export interface PaymentMethod {
   name: string;
   description: string;
   fee: number;
+  customerFee?: number;
+  imageUrl?: string;
   status: boolean;
   isDeleted?: boolean;
   available: string[];
