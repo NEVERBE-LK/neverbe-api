@@ -13,19 +13,26 @@ export class WebsiteRepository extends BaseRepository<any> {
    * Get website sliders
    */
   async getSliders(): Promise<any[]> {
-    // Try document first
-    const doc = await this.collection.doc("sliders").get();
-    if (doc.exists && doc.data()?.items?.length > 0) {
-      return doc.data()?.items || [];
-    }
+    const snapshot = await this.collection.firestore
+      .collection("sliders")
+      .get();
+    
+    const sliders = snapshot.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt,
+      };
+    });
 
-    // Fallback to collection
-    const snapshot = await this.collection.firestore.collection("sliders").get();
-    if (!snapshot.empty) {
-      return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    }
+    sliders.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeA - timeB;
+    });
 
-    return [];
+    return sliders;
   }
 
   /**
@@ -57,42 +64,34 @@ export class WebsiteRepository extends BaseRepository<any> {
    * Add a banner
    */
   async addBanner(data: any): Promise<any> {
-    const docRef = this.collection.doc("sliders");
-    const doc = await docRef.get();
-    const items = doc.exists ? (doc.data()?.items || []) : [];
+    const docRef = this.collection.firestore.collection("sliders").doc();
     
     const newItem = {
       ...data,
-      id: Math.random().toString(36).substring(2, 11),
-      createdAt: new Date().toISOString(),
+      id: docRef.id,
+      createdAt: FieldValue.serverTimestamp(),
     };
     
-    await docRef.set({
-      items: [...items, newItem],
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    await docRef.set(newItem);
     
-    return newItem;
+    return {
+      ...newItem,
+      createdAt: new Date().toISOString(),
+    };
   }
 
   /**
    * Delete a banner
    */
   async deleteBanner(id: string): Promise<any | null> {
-    const docRef = this.collection.doc("sliders");
+    const docRef = this.collection.firestore.collection("sliders").doc(id);
     const doc = await docRef.get();
     if (!doc.exists) return null;
     
-    const items = doc.data()?.items || [];
-    const itemToDelete = items.find((i: any) => i.id === id);
-    const newItems = items.filter((i: any) => i.id !== id);
+    const bannerData = doc.data();
+    await docRef.delete();
     
-    await docRef.update({
-      items: newItems,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    
-    return itemToDelete;
+    return { id, ...bannerData };
   }
 }
 

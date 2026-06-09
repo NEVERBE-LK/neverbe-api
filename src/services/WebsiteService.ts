@@ -36,7 +36,7 @@ export const deleteBanner = async (id: string) => {
     try {
       const urlParts = bannerData.url.split("/");
       const path = urlParts.slice(4).join("/");
-      if (path) {
+      if (path && adminStorageBucket) {
         await adminStorageBucket.file(path).delete().catch(err => console.error("Storage delete err:", err));
       }
     } catch (e) {
