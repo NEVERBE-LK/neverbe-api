@@ -7,7 +7,7 @@ import { addPettyCash, getPettyCashList } from "@/services/PettyCashService";
  */
 export async function GET(request: NextRequest) {
   try {
-    await verifyPosAuth("access_pos");
+    await verifyPosAuth("view_pos_pretty_cash");
 
     const { searchParams } = new URL(request.url);
     const stockId = searchParams.get("stockId");
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const user = await verifyPosAuth("access_pos");
+    const user = await verifyPosAuth("create_pos_pretty_cash");
     
     const formData = await request.formData();
     const file = formData.get("attachment") as File | null;

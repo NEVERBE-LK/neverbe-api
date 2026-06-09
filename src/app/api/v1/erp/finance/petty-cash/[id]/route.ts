@@ -32,7 +32,7 @@ export const PUT = async (
   { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
-    const decodedToken = await requirePermission(req, "create_petty_cash");
+    const decodedToken = await requirePermission(req, "update_petty_cash");
 
     const { id } = await params;
     const formData = await req.formData();
@@ -70,7 +70,7 @@ export const DELETE = async (
   { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
-    await requirePermission(req, "create_petty_cash");
+    await requirePermission(req, "delete_petty_cash");
 
     const { id } = await params;
     await deletePettyCash(id);

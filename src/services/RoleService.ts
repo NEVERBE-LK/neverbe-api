@@ -103,6 +103,11 @@ export const getAllPermissions = (): Permission[] => {
     { key: "view_pos_inventory", label: "View POS Inventory", group: "POS" },
     { key: "process_pos_exchange", label: "Process Item Exchanges", group: "POS" },
     { key: "view_pos_exchanges", label: "View Exchange History", group: "POS" },
+    { key: "change_pos_location", label: "Change POS Location", group: "POS" },
+    { key: "create_pos_pretty_cash", label: "Create POS Petty Cash Entry", group: "POS" },
+    { key: "view_pos_pretty_cash", label: "View POS Petty Cash History", group: "POS" },
+    { key: "update_pos_pretty_cash", label: "Update POS Petty Cash", group: "POS" },
+    { key: "delete_pos_pretty_cash", label: "Delete POS Petty Cash", group: "POS" },
 
     // Communications
     { key: "view_communications", label: "View Communication Logs", group: "Communications" },
