@@ -1,5 +1,6 @@
 import { BaseRepository } from "./BaseRepository";
 import { Timestamp } from "firebase-admin/firestore";
+import { decryptOrderCustomer } from "../services/EncryptionService";
 
 /**
  * Report Repository - handles complex analytical queries
@@ -35,7 +36,15 @@ export class ReportRepository extends BaseRepository<any> {
     }
 
     const snapshot = await query.get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      const orderId = data.orderId || doc.id;
+      return {
+        id: doc.id,
+        ...data,
+        customer: data.customer ? decryptOrderCustomer(data.customer, orderId) : null,
+      };
+    });
   }
 
   /**
@@ -46,7 +55,15 @@ export class ReportRepository extends BaseRepository<any> {
       .where("createdAt", "<", Timestamp.fromDate(cutoff))
       .where("paymentStatus", "in", status)
       .get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      const orderId = data.orderId || doc.id;
+      return {
+        id: doc.id,
+        ...data,
+        customer: data.customer ? decryptOrderCustomer(data.customer, orderId) : null,
+      };
+    });
   }
 
   /**

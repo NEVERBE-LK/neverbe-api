@@ -69,3 +69,5 @@ env:
   - variable: MAIL_FROM_NAME
     secret: MAIL_FROM_NAME
     availability: ["RUNTIME"]
+  - variable: "ENCRYPTION_KEY"
+    availability: ["RUNTIME"]

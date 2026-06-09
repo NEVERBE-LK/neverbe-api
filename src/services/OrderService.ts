@@ -3,6 +3,7 @@ import { inventoryRepository } from "@/repositories/InventoryRepository";
 import { productRepository } from "@/repositories/ProductRepository";
 import { FieldValue } from "firebase-admin/firestore";
 import { Order } from "@/model/Order";
+import { decryptOrderCustomer, encryptOrderCustomer } from "./EncryptionService";
 import {
   updateOrAddOrderHash,
   validateDocumentIntegrity,
@@ -207,11 +208,13 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     };
 
     if (order.customer) {
-      orderUpdate.customer = {
-        ...currentOrder.customer,
+      const decryptedCurrent = decryptOrderCustomer(currentOrder.customer, orderId);
+      const mergedCustomer = {
+        ...decryptedCurrent,
         ...order.customer,
         updatedAt: new Date(),
       };
+      orderUpdate.customer = encryptOrderCustomer(mergedCustomer, orderId);
     }
 
     if (order.trackingNumber !== undefined) orderUpdate.trackingNumber = order.trackingNumber;

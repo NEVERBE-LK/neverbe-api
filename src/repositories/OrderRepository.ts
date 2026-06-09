@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import type { Order } from "@/interfaces";
 import dayjs, { SL_TZ } from "../utils/dayjs";
 import { parseToDayjs, toSafeLocaleString } from "../services/UtilService";
+import { encryptOrderCustomer, decryptOrderCustomer } from "../services/EncryptionService";
 
 /**
  * Order Repository - handles order data access
@@ -10,6 +11,67 @@ import { parseToDayjs, toSafeLocaleString } from "../services/UtilService";
 export class OrderRepository extends BaseRepository<Order> {
   constructor() {
     super("orders");
+  }
+
+  decryptOrder(order: Order | null): Order | null {
+    if (!order) return null;
+    const orderId = order.orderId || (order as any).id;
+    if (order.customer && orderId) {
+      return {
+        ...order,
+        customer: decryptOrderCustomer(order.customer, orderId),
+      };
+    }
+    return order;
+  }
+
+  encryptOrder(order: Order): Order {
+    const orderId = order.orderId || (order as any).id;
+    if (order.customer && orderId) {
+      return {
+        ...order,
+        customer: encryptOrderCustomer(order.customer, orderId),
+      };
+    }
+    return order;
+  }
+
+  encryptOrderPartial(order: Partial<Order>, orderId: string): Partial<Order> {
+    if (order.customer && orderId) {
+      return {
+        ...order,
+        customer: encryptOrderCustomer(order.customer, orderId),
+      };
+    }
+    return order;
+  }
+
+  async findById(id: string): Promise<Order | null> {
+    const order = await super.findById(id);
+    return this.decryptOrder(order);
+  }
+
+  async findByIds(ids: string[]): Promise<Order[]> {
+    const orders = await super.findByIds(ids);
+    return orders.map(o => this.decryptOrder(o) as Order);
+  }
+
+  async create(
+    id: string,
+    data: Order,
+    tx?: FirebaseFirestore.Transaction | FirebaseFirestore.WriteBatch
+  ): Promise<Order> {
+    const encryptedData = this.encryptOrder(data);
+    return super.create(id, encryptedData, tx);
+  }
+
+  async update(
+    id: string,
+    data: Partial<Order>,
+    tx?: FirebaseFirestore.Transaction | FirebaseFirestore.WriteBatch
+  ): Promise<void> {
+    const encryptedData = this.encryptOrderPartial(data, id);
+    return super.update(id, encryptedData, tx);
   }
 
   /**
@@ -30,7 +92,8 @@ export class OrderRepository extends BaseRepository<Order> {
 
     if (snapshot.empty) return null;
 
-    const order = snapshot.docs[0].data() as Order;
+    const rawOrder = snapshot.docs[0].data() as Order;
+    const order = this.decryptOrder({ id: snapshot.docs[0].id, ...rawOrder } as any) as Order;
 
     // Safely get date for expiry check
     const createdAtDate = parseToDayjs(order.createdAt)?.toDate() || new Date();
@@ -107,11 +170,14 @@ export class OrderRepository extends BaseRepository<Order> {
       .limit(limit)
       .get();
 
-    return snapshot.docs.map((doc) => ({
-      ...(doc.data() as Order),
-      createdAt: this.toLocaleString(doc.data().createdAt),
-      updatedAt: this.toLocaleString(doc.data().updatedAt),
-    }));
+    return snapshot.docs.map((doc) => {
+      const order = this.decryptOrder({ id: doc.id, ...doc.data() } as any) as Order;
+      return {
+        ...order,
+        createdAt: this.toLocaleString(order.createdAt),
+        updatedAt: this.toLocaleString(order.updatedAt),
+      };
+    });
   }
 
   /**
@@ -150,7 +216,7 @@ export class OrderRepository extends BaseRepository<Order> {
       .where("createdAt", "<=", end)
       .get();
 
-    return snapshot.docs.map(doc => doc.data() as Order);
+    return snapshot.docs.map(doc => this.decryptOrder({ id: doc.id, ...doc.data() } as any) as Order);
   }
 
   /**
@@ -167,7 +233,7 @@ export class OrderRepository extends BaseRepository<Order> {
       .where("paymentStatus", "in", statusList)
       .get();
 
-    return snapshot.docs.map(doc => doc.data() as Order);
+    return snapshot.docs.map(doc => this.decryptOrder({ id: doc.id, ...doc.data() } as any) as Order);
   }
 
   /**
@@ -179,7 +245,7 @@ export class OrderRepository extends BaseRepository<Order> {
       .limit(limit)
       .get();
 
-    return snapshot.docs.map(doc => doc.data() as Order);
+    return snapshot.docs.map(doc => this.decryptOrder({ id: doc.id, ...doc.data() } as any) as Order);
   }
 
   /**
@@ -208,7 +274,7 @@ export class OrderRepository extends BaseRepository<Order> {
     if (limit) query = query.limit(limit);
 
     const snapshot = await query.get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
+    return snapshot.docs.map(doc => this.decryptOrder({ id: doc.id, ...doc.data() } as any) as Order);
   }
 
   /**
@@ -243,7 +309,8 @@ export class OrderRepository extends BaseRepository<Order> {
   async saveWithRetry(id: string, data: Order, maxAttempts: number = 3): Promise<void> {
     const docRef = this.collection.doc(id);
     const now = FieldValue.serverTimestamp();
-    const orderData = { ...data, createdAt: now, updatedAt: now };
+    const encrypted = this.encryptOrder(data);
+    const orderData = { ...encrypted, createdAt: now, updatedAt: now };
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -307,7 +374,7 @@ export class OrderRepository extends BaseRepository<Order> {
       .get();
 
     return {
-      dataList: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any as Order)),
+      dataList: snapshot.docs.map(doc => this.decryptOrder({ id: doc.id, ...doc.data() } as any) as Order),
       total
     };
   }
@@ -330,7 +397,7 @@ export class OrderRepository extends BaseRepository<Order> {
     const doc = snapshot.docs[0];
     return {
       docId: doc.id,
-      data: doc.data() as Order,
+      data: this.decryptOrder({ id: doc.id, ...doc.data() } as any) as Order,
     };
   }
 
