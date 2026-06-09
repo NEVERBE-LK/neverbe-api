@@ -9,6 +9,7 @@ import { posCartRepository } from "@/repositories/PosCartRepository";
 import { pettyCashRepository, stockRepository } from "@/repositories/FinanceRepositories";
 import { settingsRepository } from "@/repositories/SettingsRepository";
 import { formatEntityDates, formatListDates } from "./UtilService";
+import dayjs, { SL_TZ } from "@/utils/dayjs";
 
 // ================================
 // 🔹 DATA TYPES
@@ -276,3 +277,15 @@ export const getOrderByOrderId = async (orderId: string) => {
   if (!order) throw new AppError(`Order with Order ID ${orderId} not found`, 404);
   return formatEntityDates(order);
 };
+
+export const getTodayPOSOrdersCount = async (stockId: string): Promise<number> => {
+  if (!stockId) throw new AppError("Stock ID is required", 400);
+  const startOfToday = dayjs().tz(SL_TZ).startOf("day").toDate();
+  const snapshot = await orderRepository.collection
+    .where("stockId", "==", stockId)
+    .where("createdAt", ">=", startOfToday)
+    .count()
+    .get();
+  return snapshot.data().count;
+};
+
