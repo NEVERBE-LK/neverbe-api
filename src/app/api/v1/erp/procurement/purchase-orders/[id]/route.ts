@@ -60,7 +60,18 @@ export const PATCH = async (
     
     // Status update logic
     if (body.status) {
-      await requirePermission(req, "approve_po");
+      if (body.status === "APPROVED") {
+        await requirePermission(req, "approve_po");
+      } else if (body.status === "REJECTED") {
+        const currentPo = await getPurchaseOrderById(id);
+        if (currentPo && currentPo.status === "SUBMITTED") {
+          await requirePermission(req, "approve_po");
+        } else {
+          await requirePermission(req, "update_purchase_orders");
+        }
+      } else {
+        await requirePermission(req, "update_purchase_orders");
+      }
       
       const po = await updatePOStatus(id, body.status);
       return NextResponse.json(po);

@@ -31,7 +31,18 @@ export const PATCH = async (
     const body = await req.json();
 
     if (body.status) {
-      await requirePermission(req, "approve_grn");
+      if (body.status === "APPROVED") {
+        await requirePermission(req, "approve_grn");
+      } else if (body.status === "REJECTED") {
+        const currentGrn = await getGRNById(id);
+        if (currentGrn && currentGrn.status === "SUBMITTED") {
+          await requirePermission(req, "approve_grn");
+        } else {
+          await requirePermission(req, "create_grn");
+        }
+      } else {
+        await requirePermission(req, "create_grn");
+      }
 
       const grn = await updateGRNStatus(id, body.status);
       return NextResponse.json(grn);

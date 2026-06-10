@@ -42,6 +42,8 @@ export const getAllPermissions = (): Permission[] => {
     { key: "update_purchase_orders", label: "Update Purchase Orders", group: "Inventory" },
     { key: "view_grn", label: "View Goods Received", group: "Inventory" },
     { key: "create_grn", label: "Create GRN", group: "Inventory" },
+    { key: "approve_po", label: "Approve Purchase Orders", group: "Inventory" },
+    { key: "approve_grn", label: "Approve Goods Received Notes", group: "Inventory" },
 
     // Orders
     { key: "view_orders", label: "View Orders", group: "Orders" },
