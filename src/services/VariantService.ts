@@ -45,9 +45,6 @@ export const addVariant = async (
     isDeleted: false,
   };
 
-  const updatedVariants = [...(product.variants || []), newVariant];
-  await productRepository.updateVariants(productId, updatedVariants);
-
   return newVariant;
 };
 
@@ -76,9 +73,6 @@ export const updateVariant = async (
     images: finalImages,
     isDeleted: false,
   };
-
-  const newVariantsArray = existingVariants.map((v, index) => index === variantIndex ? updatedVariant : v);
-  await productRepository.updateVariants(productId, newVariantsArray);
 
   return updatedVariant;
 };
