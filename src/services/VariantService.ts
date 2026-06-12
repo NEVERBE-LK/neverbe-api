@@ -107,5 +107,6 @@ export const getProductVariantsForDropdown = async (productId: string) => {
       id: v.variantId,
       label: v.variantName,
       sizes: v.sizes,
+      images: v.images,
     }));
 };

@@ -346,6 +346,7 @@ export const getProductDropdown = async () => {
   return dataList.map(p => ({
     id: p.id, label: p.name, buyingPrice: p.buyingPrice || 0, sellingPrice: p.sellingPrice || 0,
     variants: p.variants || [], availableSizes: p.availableSizes || [],
+    thumbnail: p.thumbnail, brand: p.brand, category: p.category,
   }));
 };
 
