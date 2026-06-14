@@ -71,7 +71,7 @@ export default async function Home() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-gray-800 pb-8 mb-8 gap-4">
           <div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white uppercase mb-2">
-              NEVERBE API
+              Neverbe API
             </h1>
             <p className="text-gray-400 text-sm sm:text-base font-medium font-mono">
               Core Backend Services v1.0

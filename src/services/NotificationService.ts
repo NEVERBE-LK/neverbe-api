@@ -146,9 +146,9 @@ export const renderMultilingualSMS = async (templateId: string, data: Record<str
   try {
     const template = await settingsRepository.getSmsTemplate(templateId);
     if (!template) {
-      if (templateId === "ORDER_CONFIRMED") return `NEVERBE: Order #${data.orderId?.toUpperCase()} confirmed.`;
-      if (templateId === "STATUS_COMPLETED") return `NEVERBE: Order #${data.orderId?.toUpperCase()} shipped.`;
-      return `NEVERBE: Update for order #${data.orderId?.toUpperCase()}.`;
+      if (templateId === "ORDER_CONFIRMED") return `Neverbe: Order #${data.orderId?.toUpperCase()} confirmed.`;
+      if (templateId === "STATUS_COMPLETED") return `Neverbe: Order #${data.orderId?.toUpperCase()} shipped.`;
+      return `Neverbe: Update for order #${data.orderId?.toUpperCase()}.`;
     }
 
     const parts = [];
@@ -163,7 +163,7 @@ export const renderMultilingualSMS = async (templateId: string, data: Record<str
     }
     return message;
   } catch (error) {
-    return `NEVERBE: Update for Order #${data.orderId?.toUpperCase()}`;
+    return `Neverbe: Update for Order #${data.orderId?.toUpperCase()}`;
   }
 };
 
@@ -232,7 +232,7 @@ export const seedOrderSuccessTemplate = async () => {
         
         <!-- Header / Logo -->
         <div style="text-align: center; padding: 28px 16px 16px 16px;">
-            <img src="https://neverbe.lk/mail-logo.png" alt="NEVERBE" width="120" style="display: block; margin: 0 auto;" />
+            <img src="https://neverbe.lk/mail-logo.png" alt="Neverbe" width="120" style="display: block; margin: 0 auto;" />
         </div>
 
         <!-- Order Confirmation Title -->
@@ -336,7 +336,7 @@ export const seedOrderSuccessTemplate = async () => {
                 <a href="https://www.neverbe.lk/policies/shipping-return-policy" style="color: #ffffff; text-decoration: none; margin: 0 12px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Returns</a>
             </p>
             <div style="font-size: 11px; color: #a1ceb4; line-height: 1.8; font-weight: 400;">
-                <strong style="color: #ffffff; font-size: 13px; display: block; margin-bottom: 8px;">NEVERBE, Inc.</strong>
+                <strong style="color: #ffffff; font-size: 13px; display: block; margin-bottom: 8px;">Neverbe, Inc.</strong>
                 330/4/10 New Kandy Road, Delgoda<br>
                 Hotline: 070 520 8990 | 072 924 9999
             </div>
@@ -503,7 +503,7 @@ export const sendOrderStatusUpdateEmail = async (orderId: string, status: string
 
     if (s === "COMPLETED") {
       const tracking = order.trackingNumber ? `Your order has been shipped via ${order.courier || "our courier partner"}. Tracking Number: ${order.trackingNumber}.` : "Your order is now complete and has been shipped.";
-      message = `Great news! ${tracking} Thank you for choosing NEVERBE!`;
+      message = `Great news! ${tracking} Thank you for choosing Neverbe!`;
     } else if (s === "CANCELLED") {
       message = `Your order has been cancelled. If this was a mistake, please reach out to us.`;
     }
@@ -552,7 +552,7 @@ export const sendManualNotification = async (
         body: JSON.stringify({ to, text: content }),
       });
     } else {
-      const subjectLine = subject || `Update regarding your order #${orderId?.toUpperCase() || 'NEVERBE'}`;
+      const subjectLine = subject || `Update regarding your order #${orderId?.toUpperCase() || 'Neverbe'}`;
       const htmlContent = content.replace(/\n/g, '<br/>');
       
       await MailService.sendTemplateEmail([to], "generic_notification", {

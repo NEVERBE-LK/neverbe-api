@@ -329,7 +329,7 @@ export const requestPasswordReset = async (email: string, phoneNumber: string): 
       const templateHtml = `<div style="font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f8faf5; color: #111827; margin: 0; padding: 16px 8px; width: 100%; box-sizing: border-box;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(46, 158, 91, 0.08); border: 1px solid #e0e8d8;">
     <div style="text-align: center; padding: 28px 16px 16px 16px;">
-      <img src="https://neverbe.lk/mail-logo.png" alt="NEVERBE" width="120" style="display: block; margin: 0 auto;" />
+      <img src="https://neverbe.lk/mail-logo.png" alt="Neverbe" width="120" style="display: block; margin: 0 auto;" />
     </div>
     <div style="padding: 0 24px; text-align: center;">
       <h1 style="font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: -0.03em; margin: 0 0 8px 0; color: #0e331c; line-height: 1.1;">
@@ -350,7 +350,7 @@ export const requestPasswordReset = async (email: string, phoneNumber: string): 
     </div>
     <div style="background-color: #0e331c; padding: 28px 24px; text-align: center; color: #ffffff;">
       <div style="font-size: 11px; color: #a1ceb4; line-height: 1.8; font-weight: 400;">
-        <strong style="color: #ffffff; font-size: 13px; display: block; margin-bottom: 8px;">NEVERBE, Inc.</strong>
+        <strong style="color: #ffffff; font-size: 13px; display: block; margin-bottom: 8px;">Neverbe, Inc.</strong>
         330/4/10 New Kandy Road, Delgoda<br>
         Hotline: 070 520 8990 | 072 924 9999
       </div>
@@ -358,7 +358,7 @@ export const requestPasswordReset = async (email: string, phoneNumber: string): 
   </div>
 </div>`;
       await notificationRepository.saveMailTemplate(templateId, {
-        subject: "NEVERBE: Password Recovery Verification Code",
+        subject: "Neverbe: Password Recovery Verification Code",
         html: templateHtml
       });
     }
@@ -463,9 +463,9 @@ const renderPasswordResetSMS = async (otp: string): Promise<string> => {
       template = {
         name: "Password Reset OTP",
         variables: ["otp"],
-        en: "Your NEVERBE password reset verification code is {{otp}}. Valid for 5 minutes.",
-        si: "ඔබගේ NEVERBE මුරපදය නැවත සැකසීමේ කේතය {{otp}} වේ. මෙය විනාඩි 5ක් සඳහා වලංගු වේ.",
-        ta: "உங்களது NEVERBE கடவுச்சொல் மீட்டமைப்பு குறியீடு {{otp}} ஆகும். இது 5 நிமிடங்களுக்கு செல்லுபடியாகும்.",
+        en: "Your Neverbe password reset verification code is {{otp}}. Valid for 5 minutes.",
+        si: "ඔබගේ Neverbe මුරපදය නැවත සැකසීමේ කේතය {{otp}} වේ. මෙය විනාඩි 5ක් සඳහා වලංගු වේ.",
+        ta: "உங்களது Neverbe கடவுச்சொல் மீட்டமைப்பு குறியீடு {{otp}} ஆகும். இது 5 நிமிடங்களுக்கு செல்லுபடியாகும்.",
       };
       await settingsRepository.collection.firestore.collection("sms_templates").doc("PASSWORD_RESET_OTP").set(template);
     }
@@ -491,7 +491,7 @@ const renderPasswordResetSMS = async (otp: string): Promise<string> => {
     }
     return message;
   } catch (error) {
-    return `NEVERBE: Your password reset verification code is ${otp}. Valid for 5 minutes.`;
+    return `Neverbe: Your password reset verification code is ${otp}. Valid for 5 minutes.`;
   }
 };
 

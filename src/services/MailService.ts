@@ -20,7 +20,7 @@ export const MailService = {
   _getSender() {
     return {
       email: process.env.MAIL_FROM || "orders@neverbe.lk",
-      name: process.env.MAIL_FROM_NAME || "NEVERBE",
+      name: process.env.MAIL_FROM_NAME || "Neverbe",
     };
   },
 

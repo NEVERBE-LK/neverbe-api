@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NEVERBE API Server",
-  description: "Core backend server for NEVERBE E-commerce and POS",
+  title: "Neverbe API Server",
+  description: "Core backend server for Neverbe E-commerce and POS",
 };
 
 export default function RootLayout({
