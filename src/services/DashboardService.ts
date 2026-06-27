@@ -138,27 +138,24 @@ export const getOverviewByDateRange = async (
       totalOrders++;
       const orderTotal = order.total || 0;
       const orderDiscount = order.discount || 0;
-      const promoDiscount = order.promotionDiscount || 0;
       const orderShippingFee = order.shippingFee || 0;
       const orderTransactionFee = order.transactionFeeCharge || 0;
       const orderFee = order.fee || 0;
 
-      const itemDiscounts = Array.isArray(order.items)
-        ? order.items.reduce((sum, item) => sum + (item.discount || 0), 0)
-        : 0;
+      // Calculate gross sales using actual item selling prices (item.price)
+      let orderGross = 0;
+      if (Array.isArray(order.items) && order.items.length > 0) {
+        orderGross = order.items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0);
+      } else {
+        orderGross = Math.max(0, orderTotal + orderDiscount - orderShippingFee - orderFee);
+      }
 
-      const allDiscounts = orderDiscount + promoDiscount + itemDiscounts;
-
-      // Net Sale = total - orderShippingFee - orderFee (standard net merchandise sale)
-      const netSale = orderTotal - orderShippingFee - orderFee;
+      // Net Sale = orderGross - orderDiscount
+      const netSale = orderGross - orderDiscount;
       totalNetSales += netSale;
-
-      // Gross Sale = Net Sale + allDiscounts (clean gross sale before discount deductions)
-      const grossSale = netSale + allDiscounts;
-      totalGrossSales += grossSale;
-
+      totalGrossSales += orderGross;
       totalShipping += orderShippingFee;
-      totalDiscount += allDiscounts;
+      totalDiscount += orderDiscount;
 
       if (Array.isArray(order.items)) {
         order.items.forEach((item: any) => {
@@ -375,10 +372,10 @@ export const getRecentOrders = async (limitCount: number = 6): Promise<RecentOrd
   const orders = await orderRepository.findRecent(limitCount);
   return orders.map((data) => {
     const netAmount = data.total || 0;
-    const grossAmount = Array.isArray(data.items)
-      ? data.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-      : netAmount;
-    const discountAmount = Math.max(0, grossAmount - netAmount - (data.shippingFee || 0) + (data.fee || 0));
+    const discountAmount = data.discount || 0;
+    const grossAmount = Array.isArray(data.items) && data.items.length > 0
+      ? data.items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0)
+      : netAmount + discountAmount - (data.shippingFee || 0) - (data.fee || 0);
 
     return {
       orderId: data.orderId || (data as any).id,
