@@ -106,14 +106,20 @@ export const updateAdjustmentStatus = async (
   id: string,
   status: AdjustmentStatus,
   userId: string,
+  extraData?: Partial<InventoryAdjustment>,
 ): Promise<void> => {
   const currentData = await inventoryAdjustmentRepository.findById(id);
   if (!currentData) throw new AppError("Adjustment not found", 404);
-  if (currentData.status === "COMPLETED") throw new AppError("Cannot change status of a COMPLETED adjustment", 400);
+  if (currentData.status === "COMPLETED" || currentData.status === "APPROVED") {
+    throw new AppError("Cannot change status of an already approved/completed adjustment", 400);
+  }
 
-  await inventoryAdjustmentRepository.update(id, { status, adjustedBy: userId });
+  await inventoryAdjustmentRepository.update(id, {
+    status,
+    ...extraData,
+  });
 
-  if (status === "COMPLETED") {
+  if (status === "APPROVED" || status === "COMPLETED") {
     await updateInventoryFromAdjustment(currentData.items, currentData.type);
   }
 };

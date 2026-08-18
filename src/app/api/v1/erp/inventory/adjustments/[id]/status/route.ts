@@ -19,7 +19,7 @@ export const PUT = async (
     }
 
     const body = JSON.parse(dataString);
-    const { status } = body;
+    const { status, ...extraData } = body;
 
     if (!status) {
       return NextResponse.json({ success: false, message: "Status is required" }, { status: 400 });
@@ -37,7 +37,7 @@ export const PUT = async (
       return NextResponse.json({ success: false, message: "Invalid status" }, { status: 400 });
     }
 
-    await updateAdjustmentStatus(id, status as AdjustmentStatus, user.uid);
+    await updateAdjustmentStatus(id, status as AdjustmentStatus, user.uid, extraData);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

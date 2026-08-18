@@ -112,10 +112,8 @@ export class PurchaseOrderRepository extends BaseRepository<PurchaseOrder> {
     const anyReceived = updatedItems.some((item) => (item.receivedQuantity || 0) > 0);
 
     let newStatus = po.status;
-    if (allReceived) {
-      newStatus = "COMPLETED" as any;
-    } else if (anyReceived) {
-      newStatus = "APPROVED" as any;
+    if (allReceived || anyReceived) {
+      newStatus = "APPROVED";
     }
 
     const updateData = { 

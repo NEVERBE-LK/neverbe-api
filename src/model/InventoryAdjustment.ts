@@ -29,6 +29,13 @@ export interface InventoryAdjustment {
   reason: string;
   notes?: string;
   adjustedBy?: string;
+  adjustedByName?: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: Timestamp | string;
+  rejectedBy?: string;
+  rejectedByName?: string;
+  rejectedAt?: Timestamp | string;
   status: AdjustmentStatus;
   createdAt?: Timestamp | string;
   updatedAt?: Timestamp | string;

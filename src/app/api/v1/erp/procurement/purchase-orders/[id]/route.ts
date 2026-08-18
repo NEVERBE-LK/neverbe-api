@@ -73,7 +73,7 @@ export const PATCH = async (
         await requirePermission(req, "update_purchase_orders");
       }
       
-      const po = await updatePOStatus(id, body.status);
+      const po = await updatePurchaseOrder(id, body);
       return NextResponse.json(po);
     }
 
