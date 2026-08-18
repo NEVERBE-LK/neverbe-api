@@ -23,7 +23,6 @@ export interface Order {
   sourceName?: string;
   storeName?: string;
   stockId?: string;
-  integrity: boolean;
   paymentReceived?: Payment[];
 
   // Promotion & Coupon tracking

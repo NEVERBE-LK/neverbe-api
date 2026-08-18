@@ -239,11 +239,6 @@ export const createPOSOrder = async (order: Partial<Order>, userId: string) => {
     await orderRepository.saveWithRetry(order.orderId, orderData);
     await clearPosCart(order.stockId, userId, false);
 
-    // Integrity Update
-    const { updateOrAddOrderHash } = await import("./IntegrityService");
-    const savedOrder = await orderRepository.findById(order.orderId);
-    if (savedOrder) await updateOrAddOrderHash(savedOrder);
-
     return formatEntityDates(orderData);
   } catch (error) {
     console.error("Error creating POS order:", error);

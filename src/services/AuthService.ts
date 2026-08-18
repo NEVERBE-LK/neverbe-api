@@ -464,8 +464,6 @@ const renderPasswordResetSMS = async (otp: string): Promise<string> => {
         name: "Password Reset OTP",
         variables: ["otp"],
         en: "Your Neverbe password reset verification code is {{otp}}. Valid for 5 minutes.",
-        si: "ඔබගේ Neverbe මුරපදය නැවත සැකසීමේ කේතය {{otp}} වේ. මෙය විනාඩි 5ක් සඳහා වලංගු වේ.",
-        ta: "உங்களது Neverbe கடவுச்சொல் மீட்டமைப்பு குறியீடு {{otp}} ஆகும். இது 5 நிமிடங்களுக்கு செல்லுபடியாகும்.",
       };
       await settingsRepository.collection.firestore.collection("sms_templates").doc("PASSWORD_RESET_OTP").set(template);
     }
@@ -481,8 +479,6 @@ const renderPasswordResetSMS = async (otp: string): Promise<string> => {
 
     const parts = [];
     if (template.en) parts.push(processTemplate(template.en, { otp }));
-    if (template.si) parts.push(processTemplate(template.si, { otp }));
-    if (template.ta) parts.push(processTemplate(template.ta, { otp }));
 
     let message = parts.join("\n\n");
     if (template.common) {

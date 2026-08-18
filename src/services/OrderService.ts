@@ -4,11 +4,6 @@ import { productRepository } from "@/repositories/ProductRepository";
 import { FieldValue } from "firebase-admin/firestore";
 import { Order } from "@/model/Order";
 import { decryptOrderCustomer, encryptOrderCustomer } from "./EncryptionService";
-import {
-  updateOrAddOrderHash,
-  validateDocumentIntegrity,
-  validateManyIntegrity,
-} from "./IntegrityService";
 import { AppError } from "@/utils/apiResponse";
 import { sendOrderStatusUpdateSMS, sendOrderStatusUpdateEmail } from "./NotificationService";
 import { toSafeLocaleString, formatListDates, formatEntityDates, parseToDayjs, getNowSL } from "./UtilService";
@@ -51,21 +46,17 @@ export const getOrders = async (
       paymentMethod
     });
 
-    // ⚡ Batch validate integrity to avoid N+1 queries
-    const integrityMap = await validateManyIntegrity("orders", dataList);
-
-    const ordersWithIntegrity: Order[] = dataList.map((data) => {
+    const formattedOrders: Order[] = dataList.map((data) => {
       const id = (data as any).id;
       return {
         ...data,
         userId: data.userId || null,
         orderId: id,
-        integrity: integrityMap[id] ?? false,
         customer: data.customer ? { ...data.customer } : null,
       } as unknown as Order;
     });
 
-    return { dataList: formatListDates(ordersWithIntegrity), total };
+    return { dataList: formatListDates(formattedOrders), total };
   } catch (error: any) {
     console.error(error);
     throw error;
@@ -76,12 +67,9 @@ export const getOrder = async (orderId: string): Promise<Order> => {
   const data = await orderRepository.findById(orderId);
   if (!data) throw new AppError(`Order with ID ${orderId} not found`, 404);
 
-  const integrity = await validateDocumentIntegrity("orders", orderId, data);
-
   return formatEntityDates({
     ...data,
     orderId,
-    integrity,
     customer: data.customer ? formatEntityDates(data.customer) : null,
   } as any, ["createdAt", "updatedAt", "restockedAt"]);
 };
@@ -230,11 +218,6 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     tx.update(docRef, orderUpdate);
   });
 
-  const updatedOrder = await orderRepository.findById(orderId);
-  if (!updatedOrder) throw new AppError(`Order with ID ${orderId} not found after update`, 404);
-
-  await updateOrAddOrderHash(updatedOrder);
-
   // 🔔 Notifications Logic
   const oldStatus = existingOrder.status?.toUpperCase();
   const newStatus = order.status?.toUpperCase();
@@ -265,5 +248,4 @@ export const addOrder = async (order: Partial<Order>) => {
 
   if (!order.orderId) throw new AppError("Order ID is required", 400);
   await orderRepository.saveWithRetry(order.orderId, order as Order);
-  await updateOrAddOrderHash(order);
 };

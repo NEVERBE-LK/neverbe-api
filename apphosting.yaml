@@ -30,9 +30,6 @@ env:
   - variable: TEXT_API_KEY
     secret: TEXT_API_KEY
     availability: ["RUNTIME"]
-  - variable: HASH_SECRET
-    secret: HASH_SECRET
-    availability: ["RUNTIME"]
   - variable: KOKO_MERCHANT_ID
     secret: KOKO_MERCHANT_ID
     availability: ["RUNTIME"]

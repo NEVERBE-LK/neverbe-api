@@ -11,7 +11,6 @@ import {
   consumeOTPVerification,
   createAdminNotification,
 } from "./NotificationService";
-import { updateOrAddOrderHash } from "./IntegrityService";
 import { Order } from "@/model/Order";
 import { Product } from "@/model/Product";
 import { AppError } from "@/utils/apiResponse";
@@ -48,8 +47,6 @@ export const updatePayment = async (
     sendOrderConfirmedSMS(orderId).catch(err => console.error("[Notification] SMS failed:", err));
     sendOrderConfirmedEmail(orderId).catch(err => console.error("[Notification] Email failed:", err));
   }
-
-  await updateOrAddOrderHash(orderData);
 };
 
 export const addWebOrder = async (order: Partial<Order>) => {
@@ -221,10 +218,6 @@ export const addWebOrder = async (order: Partial<Order>) => {
       sendOrderConfirmedSMS(order.orderId!).catch(err => console.error("[Notification] COD SMS failed:", err));
       sendOrderConfirmedEmail(order.orderId!).catch(err => console.error("[Notification] COD Email failed:", err));
     }
-
-    const savedOrder = await orderRepository.findById(order.orderId!);
-    if (savedOrder) await updateOrAddOrderHash(savedOrder);
-
   } catch (error) {
     console.error("❌ addWebOrder failed:", error);
     throw error;

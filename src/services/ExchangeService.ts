@@ -7,7 +7,6 @@ import { ExchangeRecord, ExchangeRequest } from "@/model/ExchangeRecord";
 import { Order } from "@/model/Order";
 import { AppError } from "@/utils/apiResponse";
 import { nanoid } from "nanoid";
-import { updateOrAddOrderHash } from "./IntegrityService";
 import { formatEntityDates, formatListDates, getNowSL, parseToDayjs } from "./UtilService";
 import dayjs from "../utils/dayjs";
 
@@ -182,9 +181,6 @@ export const processExchange = async (request: ExchangeRequest, userId: string, 
     }, tx);
     await orderRepository.arrayUnionExchangeId(order.docId, exchangeId, tx);
   });
-
-  const updatedOrder = await orderRepository.findById(order.docId);
-  if (updatedOrder) await updateOrAddOrderHash(updatedOrder);
 
   const record = await exchangeRepository.findById(exchangeId);
   return formatEntityDates(record as any);

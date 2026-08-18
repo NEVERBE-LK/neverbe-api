@@ -153,8 +153,6 @@ export const renderMultilingualSMS = async (templateId: string, data: Record<str
 
     const parts = [];
     if (template.en) parts.push(processTemplate(template.en, data));
-    if (template.si) parts.push(processTemplate(template.si, data));
-    if (template.ta) parts.push(processTemplate(template.ta, data));
 
     let message = parts.join("\n\n");
     if (template.common) {
