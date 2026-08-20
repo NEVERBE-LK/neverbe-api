@@ -50,7 +50,7 @@ export const PUT = async (
       const updatedEntry = await reviewPettyCash(
         id,
         data.status,
-        decodedToken.uid || "system"
+        decodedToken.name || decodedToken.email || decodedToken.uid || "system"
       );
       return NextResponse.json(updatedEntry);
     }

@@ -1,5 +1,5 @@
 import { BaseRepository } from "./BaseRepository";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 
 /**
  * Stock Repository - handles physical stock locations
@@ -36,13 +36,11 @@ export class StockRepository extends BaseRepository<any> {
     };
   }
 
-
   /**
    * Get active stocks for dropdown
    */
   async findForDropdown(): Promise<{ id: string; label: string }[]> {
-    const snapshot = await this.getActiveQuery()
-      .get();
+    const snapshot = await this.getActiveQuery().get();
     return snapshot.docs.map(doc => ({
       id: doc.id,
       label: doc.data().name,
@@ -71,10 +69,9 @@ export class PettyCashRepository extends BaseRepository<any> {
   /**
    * Find transactions for dashboard
    */
-  async findForDashboard(startDate: Date): Promise<any[]> {
+  async findForDashboard(): Promise<any[]> {
     const snapshot = await this.collection
       .where("status", "==", "APPROVED")
-      .where("date", ">=", startDate)
       .get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
@@ -83,10 +80,7 @@ export class PettyCashRepository extends BaseRepository<any> {
    * Get recent expenses
    */
   async findRecent(limit: number = 5): Promise<any[]> {
-    const snapshot = await this.collection
-      .orderBy("date", "desc")
-      .limit(limit)
-      .get();
+    const snapshot = await this.collection.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
@@ -122,10 +116,8 @@ export class PaymentRecordRepository extends BaseRepository<any> {
   /**
    * Find records for dashboard
    */
-  async findForDashboard(startDate: Date): Promise<any[]> {
-    const snapshot = await this.collection
-      .where("date", ">=", startDate)
-      .get();
+  async findForDashboard(): Promise<any[]> {
+    const snapshot = await this.collection.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
@@ -133,9 +125,7 @@ export class PaymentRecordRepository extends BaseRepository<any> {
    * Get recent records
    */
   async findRecent(limit: number = 5): Promise<any[]> {
-    const snapshot = await this.collection
-      .limit(limit)
-      .get();
+    const snapshot = await this.collection.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 }

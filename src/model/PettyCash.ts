@@ -25,6 +25,10 @@ export interface PettyCash {
   reviewedBy: string;
   reviewedAt: Timestamp | string | null;
 
+  voucherNo?: string;
+  payee?: string;
+  rejectionReason?: string;
+
   isDeleted: boolean;
   stockId?: string;
 }

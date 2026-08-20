@@ -40,3 +40,22 @@ export const GET = async (
     return handleAuthError(error);
   }
 };
+
+export const PATCH = async (
+  req: Request,
+  { params }: { params: Promise<{ orderId: string }> }
+) => {
+  try {
+    await requirePermission(req, "update_orders");
+    const { orderId } = await params;
+    const body = await req.json();
+
+    const { updateOrderTracking } = await import("@/services/OrderService");
+    await updateOrderTracking(orderId, body);
+
+    return NextResponse.json({ success: true, message: "Order tracking info updated successfully" });
+  } catch (error: any) {
+    return handleAuthError(error);
+  }
+};
+

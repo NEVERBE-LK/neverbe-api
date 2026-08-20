@@ -45,8 +45,8 @@ export const POST = async (req: NextRequest) => {
     const data = JSON.parse(dataField as string);
 
     // Set createdBy from authenticated user
-    data.createdBy = decodedToken.uid;
-    data.updatedBy = decodedToken.uid;
+    data.createdBy = decodedToken.name || decodedToken.email || decodedToken.uid;
+    data.updatedBy = decodedToken.name || decodedToken.email || decodedToken.uid;
 
     const newEntry = await addPettyCash(data, file || undefined);
     return NextResponse.json(newEntry, { status: 201 });

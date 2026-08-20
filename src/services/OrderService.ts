@@ -232,6 +232,67 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
   }
 };
 
+export const updateOrderCustomer = async (
+  orderId: string,
+  customerData: { customer: any; userId?: string | null }
+) => {
+  const existing = await getOrder(orderId);
+  return await updateOrder(
+    {
+      ...existing,
+      customer: customerData.customer,
+      userId: customerData.userId !== undefined ? customerData.userId : existing.userId,
+    },
+    orderId
+  );
+};
+
+export const updateOrderItems = async (
+  orderId: string,
+  payload: { items: any[]; total?: number; discount?: number; shippingFee?: number; fee?: number }
+) => {
+  const existing = await getOrder(orderId);
+  return await updateOrder(
+    {
+      ...existing,
+      items: payload.items,
+      total: payload.total !== undefined ? payload.total : existing.total,
+      discount: payload.discount !== undefined ? payload.discount : existing.discount,
+      shippingFee: payload.shippingFee !== undefined ? payload.shippingFee : existing.shippingFee,
+      fee: payload.fee !== undefined ? payload.fee : existing.fee,
+    },
+    orderId
+  );
+};
+
+export const updateOrderTracking = async (
+  orderId: string,
+  payload: {
+    status?: string;
+    paymentStatus?: string;
+    courier?: string;
+    trackingNumber?: string;
+    estimatedDelivery?: any;
+    restocked?: boolean;
+    sendNotification?: boolean;
+  }
+) => {
+  const existing = await getOrder(orderId);
+  return await updateOrder(
+    {
+      ...existing,
+      status: payload.status || existing.status,
+      paymentStatus: payload.paymentStatus || existing.paymentStatus,
+      courier: payload.courier !== undefined ? payload.courier : existing.courier,
+      trackingNumber: payload.trackingNumber !== undefined ? payload.trackingNumber : existing.trackingNumber,
+      estimatedDelivery: payload.estimatedDelivery !== undefined ? payload.estimatedDelivery : existing.estimatedDelivery,
+      restocked: payload.restocked !== undefined ? payload.restocked : existing.restocked,
+      sendNotification: payload.sendNotification,
+    },
+    orderId
+  );
+};
+
 export const addOrder = async (order: Partial<Order>) => {
   if (!order.from) throw new AppError("Order source (from) is required", 400);
   const fromSource = order.from.toLowerCase();

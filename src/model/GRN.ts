@@ -28,6 +28,12 @@ export interface GRN {
   receivedDate: string;
   inventoryUpdated: boolean; // Flag to track if stock was updated
   status: GRNStatus;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: Timestamp | string;
+  rejectedBy?: string;
+  rejectedByName?: string;
+  rejectedAt?: Timestamp | string;
   createdAt?: Timestamp | string;
   updatedAt?: Timestamp | string;
 }
@@ -36,14 +42,12 @@ export type GRNStatus =
   | "DRAFT"
   | "SUBMITTED"
   | "APPROVED"
-  | "REJECTED"
-  | "COMPLETED";
+  | "REJECTED";
 
 export const GRN_STATUS_LABELS: Record<GRNStatus, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted",
   APPROVED: "Approved",
-  COMPLETED: "Completed",
   REJECTED: "Rejected",
 };
 
@@ -52,5 +56,4 @@ export const GRN_STATUS_COLORS: Record<GRNStatus, string> = {
   SUBMITTED: "bg-blue-100 text-blue-800",
   APPROVED: "bg-green-100 text-green-800",
   REJECTED: "bg-red-100 text-red-800",
-  COMPLETED: "bg-indigo-100 text-indigo-800",
 };

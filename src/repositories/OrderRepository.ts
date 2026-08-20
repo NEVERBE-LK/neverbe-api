@@ -251,30 +251,36 @@ export class OrderRepository extends BaseRepository<Order> {
   /**
    * Find orders for reporting purposes
    */
-  async findForReport(options: {
-    start: Date;
-    end: Date;
+  async findForReport(options?: {
+    start?: Date;
+    end?: Date;
     paymentStatus?: string;
     limit?: number;
   }): Promise<Order[]> {
-    const { start, end, paymentStatus, limit } = options;
-    let query = this.collection
-      .where("createdAt", ">=", start)
-      .where("createdAt", "<=", end);
+    const snapshot = await this.collection.get();
+    let docs = snapshot.docs.map(doc => this.decryptOrder({ id: doc.id, ...doc.data() } as any) as Order);
 
-    if (paymentStatus && paymentStatus !== "all") {
-      if (paymentStatus.toLowerCase() === "paid") {
-        query = query.where("paymentStatus", "in", ["Paid", "PAID"]);
-      } else {
-        query = query.where("paymentStatus", "==", paymentStatus);
-      }
+    if (options?.start || options?.end) {
+      const startMs = options.start ? options.start.getTime() : 0;
+      const endMs = options.end ? options.end.getTime() : Date.now();
+      docs = docs.filter((order) => {
+        const t = parseToDayjs(order.createdAt)?.valueOf() || 0;
+        return t >= startMs && t <= endMs;
+      });
     }
 
-    query = query.orderBy("createdAt", "desc");
-    if (limit) query = query.limit(limit);
+    if (options?.paymentStatus && options.paymentStatus !== "all") {
+      const ps = options.paymentStatus.toLowerCase();
+      docs = docs.filter((o) => (o.paymentStatus || "").toLowerCase() === ps);
+    }
 
-    const snapshot = await query.get();
-    return snapshot.docs.map(doc => this.decryptOrder({ id: doc.id, ...doc.data() } as any) as Order);
+    docs.sort((a, b) => (parseToDayjs(b.createdAt)?.valueOf() || 0) - (parseToDayjs(a.createdAt)?.valueOf() || 0));
+
+    if (options?.limit) {
+      docs = docs.slice(0, options.limit);
+    }
+
+    return docs;
   }
 
   /**

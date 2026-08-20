@@ -62,7 +62,7 @@ export const createGRN = async (
 
   const savedGRN = await grnRepository.create(id, newGRN);
 
-  if (grn.status === "APPROVED" || grn.status === "COMPLETED") {
+  if (grn.status === "APPROVED") {
     await processGRNApproval(id);
   }
 
@@ -71,16 +71,20 @@ export const createGRN = async (
 
 export const updateGRNStatus = async (
   id: string,
-  status: GRNStatus,
+  updatePayload: Partial<GRN> | GRNStatus,
 ): Promise<GRN> => {
   const grn = await getGRNById(id);
-  if (grn.status === "COMPLETED" || grn.status === "REJECTED") {
+  if (grn.status === "REJECTED") {
     throw new AppError(`Cannot update status of a ${grn.status} GRN`, 400);
   }
 
-  await grnRepository.update(id, { status });
+  const updateData: Partial<GRN> =
+    typeof updatePayload === "string" ? { status: updatePayload } : updatePayload;
 
-  if ((status === "APPROVED" || status === "COMPLETED") && !grn.inventoryUpdated) {
+  const targetStatus = updateData.status || grn.status;
+  await grnRepository.update(id, updateData);
+
+  if (targetStatus === "APPROVED" && !grn.inventoryUpdated) {
     await processGRNApproval(id);
   }
 

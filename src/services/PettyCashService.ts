@@ -1,11 +1,49 @@
 import { pettyCashRepository } from "@/repositories/FinanceRepositories";
+import { userRepository } from "@/repositories/UserRepository";
+import { adminAuth } from "@/firebase/firebaseAdmin";
 import { PettyCash } from "@/model/PettyCash";
 import { nanoid } from "nanoid";
 import { Timestamp } from "firebase-admin/firestore";
 import { uploadFile } from "@/services/StorageService";
 import { AppError } from "@/utils/apiResponse";
 import { updateBankAccountBalance } from "./BankAccountService";
-import { toSafeLocaleString, formatEntityDates, formatListDates, parseToDayjs } from "./UtilService";
+import { formatEntityDates, formatListDates, parseToDayjs } from "./UtilService";
+
+const userNameCache: Record<string, string> = {};
+
+export const resolveUserName = async (uidOrName: string | undefined): Promise<string> => {
+  if (!uidOrName) return "System";
+  if (uidOrName.includes(" ") || uidOrName.includes("@") || uidOrName.length < 15) {
+    return uidOrName;
+  }
+  if (userNameCache[uidOrName]) return userNameCache[uidOrName];
+
+  try {
+    const userDoc = await userRepository.findById(uidOrName);
+    if (userDoc?.username) {
+      userNameCache[uidOrName] = userDoc.username;
+      return userDoc.username;
+    }
+    if (userDoc?.email) {
+      userNameCache[uidOrName] = userDoc.email;
+      return userDoc.email;
+    }
+    const authUser = await adminAuth.getUser(uidOrName).catch(() => null);
+    if (authUser?.displayName) {
+      userNameCache[uidOrName] = authUser.displayName;
+      return authUser.displayName;
+    }
+    if (authUser?.email) {
+      userNameCache[uidOrName] = authUser.email;
+      return authUser.email;
+    }
+  } catch (err) {
+    // fallback
+  }
+
+  userNameCache[uidOrName] = uidOrName;
+  return uidOrName;
+};
 
 /**
  * PettyCashService - Business logic for petty cash entries
@@ -41,9 +79,12 @@ export const addPettyCash = async (
 
   await pettyCashRepository.create(id, newEntry as any);
 
-  return formatEntityDates({
+  const formatted = formatEntityDates({
     ...newEntry,
   } as any, ["date", "createdAt", "updatedAt"]);
+
+  formatted.createdBy = await resolveUserName(formatted.createdBy);
+  return formatted;
 };
 
 export const updatePettyCash = async (
@@ -73,8 +114,7 @@ export const updatePettyCash = async (
   }
 
   await pettyCashRepository.update(id, updates);
-  const updated = await pettyCashRepository.findById(id);
-  return formatEntityDates(updated as any, ["date", "createdAt", "updatedAt", "reviewedAt"]);
+  return await getPettyCashById(id);
 };
 
 export const getPettyCashList = async (
@@ -121,6 +161,14 @@ export const getPettyCashList = async (
   const total = filtered.length;
   const paginated = filtered.slice((page - 1) * size, page * size);
 
+  // Resolve user UIDs to user names/emails for display
+  await Promise.all(
+    paginated.map(async (item) => {
+      if (item.createdBy) item.createdBy = await resolveUserName(item.createdBy);
+      if (item.reviewedBy) item.reviewedBy = await resolveUserName(item.reviewedBy);
+    })
+  );
+
   return { data: paginated, total };
 };
 
@@ -128,9 +176,14 @@ export const getPettyCashById = async (id: string): Promise<PettyCash> => {
   const d = await pettyCashRepository.findById(id);
   if (!d) throw new AppError(`Petty Cash entry with ID ${id} not found`, 404);
 
-  return formatEntityDates({
+  const formatted = formatEntityDates({
     ...d,
   } as any, ["date", "createdAt", "updatedAt", "reviewedAt"]);
+
+  formatted.createdBy = await resolveUserName(formatted.createdBy);
+  if (formatted.reviewedBy) formatted.reviewedBy = await resolveUserName(formatted.reviewedBy);
+
+  return formatted;
 };
 
 export const deletePettyCash = async (id: string): Promise<void> => {
