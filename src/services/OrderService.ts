@@ -82,22 +82,56 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     throw new AppError(`Order with ID ${orderId} is already refunded can't proceed with update`, 400);
   }
 
-  const stockId = existingOrder.stockId;
+  const TERMINAL_STATUSES = ["completed", "returned", "refused (rto)", "refused", "exchanged", "cancelled"];
+  const existingStatusLower = (existingOrder.status || "Pending").toLowerCase();
+  const targetStatusLower = (order.status || existingOrder.status || "Pending").toLowerCase();
 
-  // 1. Map current active quantities (0 if order was already Cancelled)
+  // 🔒 RULE 1: Terminal Status Freeze Guard (Prevent editing items/customer of terminal orders)
+  if (TERMINAL_STATUSES.includes(existingStatusLower)) {
+    // Only allow status changes (e.g. tracking info updates), block item and customer modifications
+    const isEditingItems = order.items && JSON.stringify(order.items) !== JSON.stringify(existingOrder.items);
+    const isEditingCustomer = order.customer && JSON.stringify(order.customer) !== JSON.stringify(existingOrder.customer);
+    if (isEditingItems || isEditingCustomer) {
+      throw new AppError(`Order #${orderId} is in a terminal status (${existingOrder.status}) and is frozen. Item and customer details cannot be modified.`, 400);
+    }
+  }
+
+  // 🛑 RULE 2: Order Completion Validation Guard
+  if (targetStatusLower === "completed") {
+    const targetPaymentStatus = (order.paymentStatus || existingOrder.paymentStatus || "Pending").toLowerCase();
+    const isPaid = targetPaymentStatus === "paid" || (order.paymentReceived?.reduce((sum, p) => sum + p.amount, 0) || 0) >= (order.total || existingOrder.total || 0);
+    
+    if (!isPaid) {
+      throw new AppError("Cannot mark order as Completed: Payment status must be 'Paid' before completing order.", 400);
+    }
+
+    const isWebsiteOrDelivery = (existingOrder.from?.toLowerCase() === "website") || existingOrder.courier || existingOrder.trackingNumber;
+    const hasCourier = Boolean(order.courier || existingOrder.courier);
+    const hasTracking = Boolean((order.trackingNumber || existingOrder.trackingNumber)?.trim());
+
+    if (isWebsiteOrDelivery && (!hasCourier || !hasTracking)) {
+      throw new AppError("Cannot mark order as Completed: Courier and Waybill Tracking Number must be provided for delivery orders.", 400);
+    }
+  }
+
+  const INACTIVE_STATUSES = ["cancelled", "returned", "refused (rto)", "refused", "exchanged"];
+
+  // 1. Map current active quantities (0 if order was already Cancelled/Returned/Restocked)
   const oldQtys: Record<string, number> = {};
   const oldStatusForStock = (existingOrder.status || "Pending").toLowerCase();
-  if (oldStatusForStock !== "cancelled" && Array.isArray(existingOrder.items)) {
+  const isOldInactive = INACTIVE_STATUSES.includes(oldStatusForStock) || existingOrder.restocked === true;
+  if (!isOldInactive && Array.isArray(existingOrder.items)) {
     existingOrder.items.forEach((item) => {
       const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
       oldQtys[key] = (oldQtys[key] || 0) + item.quantity;
     });
   }
 
-  // 2. Map target active quantities (0 if order is being Cancelled)
+  // 2. Map target active quantities (0 if order is being Cancelled/Returned/Restocked)
   const newQtys: Record<string, number> = {};
   const newStatusForStock = (order.status || "Pending").toLowerCase();
-  if (newStatusForStock !== "cancelled" && Array.isArray(order.items)) {
+  const isNewInactive = INACTIVE_STATUSES.includes(newStatusForStock) || order.restocked === true;
+  if (!isNewInactive && Array.isArray(order.items)) {
     order.items.forEach((item) => {
       const key = `${item.itemId}_${item.variantId || ""}_${item.size}`;
       newQtys[key] = (newQtys[key] || 0) + item.quantity;
@@ -205,6 +239,8 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
       orderUpdate.customer = encryptOrderCustomer(mergedCustomer, orderId);
     }
 
+    if (order.restocked !== undefined) orderUpdate.restocked = order.restocked;
+    if (order.returnReason !== undefined) orderUpdate.returnReason = order.returnReason;
     if (order.trackingNumber !== undefined) orderUpdate.trackingNumber = order.trackingNumber;
     if (order.courier !== undefined) orderUpdate.courier = order.courier;
     if (order.items !== undefined) orderUpdate.items = order.items;

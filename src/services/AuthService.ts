@@ -74,7 +74,8 @@ export const verifyPosAuth = (permission?: string) => requirePermission(null, pe
 
 
 export const handleAuthError = (error: any) => {
-  const status = error instanceof AppError ? error.statusCode : 500;
+  console.error("[API Error]", error);
+  const status = error?.statusCode || (error instanceof AppError ? error.statusCode : 500);
   return errorResponse(error, status);
 };
 

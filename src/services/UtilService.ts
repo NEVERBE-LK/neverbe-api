@@ -114,3 +114,19 @@ export const parseToDayjs = (val: any) => {
   const final = dayjs(val);
   return final.isValid() ? final : null;
 };
+
+/**
+ * Format phone number to Sri Lanka E.164 standard (947XXXXXXXX)
+ */
+export const formatPhoneForSMS = (phone: string | null | undefined): string => {
+  if (!phone) return "";
+  let cleaned = phone.replace(/[^\d+]/g, "");
+  if (cleaned.startsWith("+94")) {
+    cleaned = cleaned.substring(1);
+  } else if (cleaned.startsWith("0")) {
+    cleaned = "94" + cleaned.substring(1);
+  } else if (cleaned.length === 9 && !cleaned.startsWith("94")) {
+    cleaned = "94" + cleaned;
+  }
+  return cleaned;
+};

@@ -5,7 +5,7 @@ import { getOrderByIdForInvoice } from "./WebOrderService";
 import { verifyCaptchaToken } from "./CapchaService";
 import { notificationRepository } from "@/repositories/NotificationRepository";
 import { settingsRepository } from "@/repositories/SettingsRepository";
-import { getNowSL, parseToDayjs } from "./UtilService";
+import { getNowSL, parseToDayjs, formatPhoneForSMS } from "./UtilService";
 import dayjs from "../utils/dayjs";
 import { MailService } from "./MailService";
 
@@ -173,7 +173,14 @@ export const sendOrderConfirmedSMS = async (orderId: string) => {
     const order: Order = await getOrderByIdForInvoice(orderId);
     if (!order?.customer?.phone) return false;
 
-    const phone = order.customer.phone.trim();
+    // 🛑 Payment Guard: Suppress SMS for failed payment orders
+    if (order.paymentStatus?.toLowerCase() === "failed") {
+      console.log(`[Notification Service] Suppressing Order Confirmed SMS for order #${orderId} due to FAILED payment status.`);
+      return false;
+    }
+
+    const phone = formatPhoneForSMS(order.customer.phone);
+    if (!phone) return false;
     const customerName = order.customer.name.split(" ")[0];
     const text = await renderMultilingualSMS("ORDER_CONFIRMED", { customerName, orderId });
     const hashValue = generateHash(phone + text);
@@ -194,12 +201,13 @@ export const sendOrderConfirmedSMS = async (orderId: string) => {
   }
 };
 
-export const sendeBillSMS = async (orderId: string, phone: string) => {
+export const sendeBillSMS = async (orderId: string, rawPhone: string) => {
   try {
     const TEXT_API_KEY = process.env.TEXT_API_KEY;
-    if (!TEXT_API_KEY || !phone || !orderId) return false;
+    if (!TEXT_API_KEY || !rawPhone || !orderId) return false;
 
-    const cleanPhone = phone.trim();
+    const cleanPhone = formatPhoneForSMS(rawPhone);
+    if (!cleanPhone) return false;
     const ebillUrl = `https://neverbe.lk/ebill/${orderId}`;
     const text = await renderMultilingualSMS("EBILL_SENT", { ebillUrl, orderId });
     const hashValue = generateHash(cleanPhone + "EBILL" + orderId);
@@ -458,7 +466,14 @@ export const sendOrderStatusUpdateSMS = async (orderId: string, status: string) 
     const order: Order = await getOrderByIdForInvoice(orderId);
     if (!order?.customer?.phone) return false;
 
-    const phone = order.customer.phone.trim();
+    // 🛑 Payment Guard: Suppress SMS for failed payment orders
+    if (order.paymentStatus?.toLowerCase() === "failed") {
+      console.log(`[Notification Service] Suppressing Status Update SMS for order #${orderId} due to FAILED payment status.`);
+      return false;
+    }
+
+    const phone = formatPhoneForSMS(order.customer.phone);
+    if (!phone) return false;
     const name = order.customer.name.split(" ")[0];
     let text = "";
     const s = status.toUpperCase();
@@ -494,6 +509,12 @@ export const sendOrderStatusUpdateEmail = async (orderId: string, status: string
     const order: Order = await getOrderByIdForInvoice(orderId);
     const email = order?.customer?.email?.trim();
     if (!email) return false;
+
+    // 🛑 Payment Guard: Suppress Email for failed payment orders
+    if (order.paymentStatus?.toLowerCase() === "failed") {
+      console.log(`[Notification Service] Suppressing Status Update Email for order #${orderId} due to FAILED payment status.`);
+      return false;
+    }
 
     const name = order.customer.name || "Customer";
     const s = status.toUpperCase();
