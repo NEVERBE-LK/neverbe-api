@@ -78,6 +78,8 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
   const existingOrder = await orderRepository.findById(orderId);
   if (!existingOrder) throw new AppError(`Order with ID ${orderId} not found`, 404);
 
+  const stockId = order.stockId || existingOrder.stockId;
+
   if (existingOrder.paymentStatus?.toLowerCase() === "refunded") {
     throw new AppError(`Order with ID ${orderId} is already refunded can't proceed with update`, 400);
   }
