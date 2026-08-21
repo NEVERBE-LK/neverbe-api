@@ -88,17 +88,28 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
   const existingStatusLower = (existingOrder.status || "Pending").toLowerCase();
   const targetStatusLower = (order.status || existingOrder.status || "Pending").toLowerCase();
 
-  // 🔒 RULE 1: Terminal Status Freeze Guard (Prevent editing items/customer of terminal orders)
-  if (TERMINAL_STATUSES.includes(existingStatusLower)) {
-    // Only allow status changes (e.g. tracking info updates), block item and customer modifications
-    const isEditingItems = order.items && JSON.stringify(order.items) !== JSON.stringify(existingOrder.items);
-    const isEditingCustomer = order.customer && JSON.stringify(order.customer) !== JSON.stringify(existingOrder.customer);
-    if (isEditingItems || isEditingCustomer) {
-      throw new AppError(`Order #${orderId} is in a terminal status (${existingOrder.status}) and is frozen. Item and customer details cannot be modified.`, 400);
+  const existingFromLower = (existingOrder.from || "").toLowerCase();
+  const isWebsiteOrder = existingFromLower === "website";
+  const isStoreOrder = existingFromLower === "store";
+
+  // 🔒 RULE 1: Edit Restriction Guard (Order details can ONLY be edited for Website orders in Processing/Pending status)
+  const isEditingItems = order.items && JSON.stringify(order.items) !== JSON.stringify(existingOrder.items);
+  const isEditingCustomer = order.customer && JSON.stringify(order.customer) !== JSON.stringify(existingOrder.customer);
+
+  if (isEditingItems || isEditingCustomer) {
+    const isProcessingStatus = ["pending", "processing"].includes(existingStatusLower);
+    if (!isWebsiteOrder || !isProcessingStatus) {
+      throw new AppError(`Order details (customer info & order items) can ONLY be edited for Website orders in Processing status. Order #${orderId} (${existingOrder.from || "Order"}, ${existingOrder.status}) cannot be edited.`, 400);
     }
   }
 
-  // 🛑 RULE 2: Order Completion Validation Guard
+  // 🏬 RULE 2: Store / POS Order Restriction Guard (Store orders CANNOT be processed, returned, or cancelled in ERP)
+  const isStatusChanging = order.status && order.status.toLowerCase() !== existingStatusLower;
+  if (isStoreOrder && isStatusChanging) {
+    throw new AppError("Store / POS orders cannot be processed, returned, or cancelled from ERP. All store order exchanges must be handled directly through the POS system.", 400);
+  }
+
+  // 🛑 RULE 3: Order Completion Validation Guard
   if (targetStatusLower === "completed") {
     const targetPaymentStatus = (order.paymentStatus || existingOrder.paymentStatus || "Pending").toLowerCase();
     const isPaid = targetPaymentStatus === "paid" || (order.paymentReceived?.reduce((sum, p) => sum + p.amount, 0) || 0) >= (order.total || existingOrder.total || 0);
@@ -107,7 +118,7 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
       throw new AppError("Cannot mark order as Completed: Payment status must be 'Paid' before completing order.", 400);
     }
 
-    const isWebsiteOrDelivery = (existingOrder.from?.toLowerCase() === "website") || existingOrder.courier || existingOrder.trackingNumber;
+    const isWebsiteOrDelivery = isWebsiteOrder || existingOrder.courier || existingOrder.trackingNumber;
     const hasCourier = Boolean(order.courier || existingOrder.courier);
     const hasTracking = Boolean((order.trackingNumber || existingOrder.trackingNumber)?.trim());
 
@@ -226,8 +237,8 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
 
     // --- UPDATE ORDER DOCUMENT ---
     const orderUpdate: any = {
-      paymentStatus: order.paymentStatus,
-      status: order.status,
+      paymentStatus: order.paymentStatus !== undefined ? order.paymentStatus : existingOrder.paymentStatus,
+      status: order.status !== undefined ? order.status : existingOrder.status,
       updatedAt: FieldValue.serverTimestamp(),
     };
 
@@ -274,13 +285,11 @@ export const updateOrderCustomer = async (
   orderId: string,
   customerData: { customer: any; userId?: string | null }
 ) => {
-  const existing = await getOrder(orderId);
   return await updateOrder(
     {
-      ...existing,
       customer: customerData.customer,
-      userId: customerData.userId !== undefined ? customerData.userId : existing.userId,
-    },
+      userId: customerData.userId,
+    } as any,
     orderId
   );
 };
@@ -289,16 +298,14 @@ export const updateOrderItems = async (
   orderId: string,
   payload: { items: any[]; total?: number; discount?: number; shippingFee?: number; fee?: number }
 ) => {
-  const existing = await getOrder(orderId);
   return await updateOrder(
     {
-      ...existing,
       items: payload.items,
-      total: payload.total !== undefined ? payload.total : existing.total,
-      discount: payload.discount !== undefined ? payload.discount : existing.discount,
-      shippingFee: payload.shippingFee !== undefined ? payload.shippingFee : existing.shippingFee,
-      fee: payload.fee !== undefined ? payload.fee : existing.fee,
-    },
+      total: payload.total,
+      discount: payload.discount,
+      shippingFee: payload.shippingFee,
+      fee: payload.fee,
+    } as any,
     orderId
   );
 };
@@ -315,18 +322,16 @@ export const updateOrderTracking = async (
     sendNotification?: boolean;
   }
 ) => {
-  const existing = await getOrder(orderId);
   return await updateOrder(
     {
-      ...existing,
-      status: payload.status || existing.status,
-      paymentStatus: payload.paymentStatus || existing.paymentStatus,
-      courier: payload.courier !== undefined ? payload.courier : existing.courier,
-      trackingNumber: payload.trackingNumber !== undefined ? payload.trackingNumber : existing.trackingNumber,
-      estimatedDelivery: payload.estimatedDelivery !== undefined ? payload.estimatedDelivery : existing.estimatedDelivery,
-      restocked: payload.restocked !== undefined ? payload.restocked : existing.restocked,
+      status: payload.status,
+      paymentStatus: payload.paymentStatus,
+      courier: payload.courier,
+      trackingNumber: payload.trackingNumber,
+      estimatedDelivery: payload.estimatedDelivery,
+      restocked: payload.restocked,
       sendNotification: payload.sendNotification,
-    },
+    } as any,
     orderId
   );
 };

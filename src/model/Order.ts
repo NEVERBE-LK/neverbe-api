@@ -42,6 +42,8 @@ export interface Order {
   restockedAt?: Timestamp | string;
   restocked?: boolean;
   cleanupProcessed?: boolean;
+  returnReason?: string;
+  returnNotes?: string;
 
   createdAt: Timestamp | string;
   updatedAt: Timestamp | string;

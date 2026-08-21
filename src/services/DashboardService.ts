@@ -110,19 +110,35 @@ export const getOverviewByDateRange = async (
   endDate: Date,
 ): Promise<DashboardOverview> => {
   try {
-    const orders = await orderRepository.findByStatusInDateRange(startDate, endDate);
+    // 1. Fetch orders and expenses in parallel
+    const [orders, expenses] = await Promise.all([
+      orderRepository.findByStatusInDateRange(startDate, endDate),
+      reportRepository.findExpensesForReport({
+        start: startDate,
+        end: endDate,
+        type: "expense",
+        status: "APPROVED",
+      }),
+    ]);
 
-    // Collect unique product IDs for COGS calculation
+    // 2. Only collect product IDs for items missing bPrice
     const productIds: Set<string> = new Set();
     orders.forEach((order) => {
       if (Array.isArray(order.items)) {
-        order.items.forEach((item) => { if (item.itemId) productIds.add(item.itemId); });
+        order.items.forEach((item) => {
+          if (item.itemId && (item.bPrice === undefined || item.bPrice === null || item.bPrice === 0)) {
+            productIds.add(item.itemId);
+          }
+        });
       }
     });
 
-    // Fetch product data for buying prices in batch (including sensitive data for COGS)
-    const products = await productRepository.findByIds(Array.from(productIds), true);
-    const productPriceMap = new Map(products.map(p => [p.id, p.buyingPrice || 0]));
+    // 3. Fetch product buying prices only if needed
+    const productPriceMap = new Map<string, number>();
+    if (productIds.size > 0) {
+      const products = await productRepository.findByIds(Array.from(productIds), true);
+      products.forEach((p) => productPriceMap.set(p.id, p.buyingPrice || 0));
+    }
 
     // Calculate totals
     let totalOrders = 0;
@@ -170,16 +186,7 @@ export const getOverviewByDateRange = async (
       totalFee += orderFee;
     });
 
-    // Fetch expenses for operating expenses deduction
-    const expenses = await reportRepository.findExpensesForReport({
-      start: startDate,
-      end: endDate,
-      type: "expense",
-      status: "APPROVED",
-    });
     const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-
-    // Profit = Net Revenue + Order Fee - Buying Cost - Transaction Fee - Operating Expenses (fully aligned with P&L statement)
     const totalProfit = totalNetSales + totalFee - totalBuyingCost - totalTransactionFee - totalExpenses;
 
     return {
@@ -273,11 +280,20 @@ export const getRevenueByCategory = async (): Promise<CategoryData[]> => {
 
   const orders = await orderRepository.findByStatusInDateRange(startOfMonth, endOfMonth, ["Paid", "PAID", "Success", "SUCCESS", "Completed", "COMPLETED"]);
   
-  // Fetch product categories in batch if missing in orders
+  // Fetch product categories in batch if missing in order items
   const productIds = new Set<string>();
-  orders.forEach(o => o.items?.forEach(i => { if (i.itemId) productIds.add(i.itemId); }));
-  const products = await productRepository.findByIds(Array.from(productIds));
-  const productCatMap = new Map(products.map(p => [p.id, p.category]));
+  orders.forEach((o) =>
+    o.items?.forEach((i) => {
+      if (i.itemId && !(i as any).categoryName) {
+        productIds.add(i.itemId);
+      }
+    })
+  );
+  const productCatMap = new Map<string, string>();
+  if (productIds.size > 0) {
+    const products = await productRepository.findByIds(Array.from(productIds));
+    products.forEach((p) => productCatMap.set(p.id, p.category));
+  }
 
   const categoryMap = new Map<string, { revenue: number; orders: number }>();
   let totalRevenue = 0;
@@ -285,7 +301,7 @@ export const getRevenueByCategory = async (): Promise<CategoryData[]> => {
   orders.forEach((order) => {
     if (Array.isArray(order.items)) {
       order.items.forEach((item) => {
-        const cat = item.categoryName || productCatMap.get(item.itemId) || "Uncategorized";
+        const cat = (item as any).categoryName || productCatMap.get(item.itemId) || "Uncategorized";
         const revenue = (item.price || 0) * (item.quantity || 0);
         
         const existing = categoryMap.get(cat) || { revenue: 0, orders: 0 };
@@ -507,4 +523,53 @@ export const getWeeklyTrends = async (): Promise<WeeklyTrends> => {
   }
 
   return { labels, orders, revenue };
+};
+
+let cachedDashboardSummary: { data: any; timestamp: number } | null = null;
+const SUMMARY_CACHE_TTL_MS = 15000; // 15s in-memory cache for ultra fast response
+
+export const getDashboardSummary = async (forceRefresh = false) => {
+  const now = Date.now();
+  if (!forceRefresh && cachedDashboardSummary && now - cachedDashboardSummary.timestamp < SUMMARY_CACHE_TTL_MS) {
+    return cachedDashboardSummary.data;
+  }
+
+  const slNow = getNowSL();
+
+  const [
+    daily,
+    monthlyComparison,
+    yearlyPerformance,
+    orderStatusDistribution,
+    profitMargins,
+    revenueByCategory,
+    popularItems,
+    lowStock,
+    recentOrders,
+  ] = await Promise.all([
+    getDailySnapshot(),
+    getMonthlyComparison(),
+    getYearlySalesPerformance(slNow.year()),
+    getOrderStatusDistribution(),
+    getProfitMargins(),
+    getRevenueByCategory(),
+    getPopularItems(10, slNow.month(), slNow.year()),
+    getLowStockAlerts(5, 10),
+    getRecentOrders(6),
+  ]);
+
+  const summary = {
+    daily,
+    monthlyComparison,
+    yearlyPerformance,
+    orderStatusDistribution,
+    profitMargins,
+    revenueByCategory,
+    popularItems,
+    lowStock,
+    recentOrders,
+  };
+
+  cachedDashboardSummary = { data: summary, timestamp: now };
+  return summary;
 };
