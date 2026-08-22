@@ -22,7 +22,8 @@ export interface ExchangeRecord {
   replacementItems: ExchangeItem[];
   returnTotal: number; // Total value of returned items
   replacementTotal: number; // Total value of replacement items
-  priceDifference: number; // + = customer pays more, - = refund to customer
+  priceDifference: number; // + = customer pays more, - = credit issued to customer
+  creditIssued?: number; // Credit amount issued for store credit
   paymentMethod?: string;
   paymentReceived?: number; // Actual payment received (for customer pays more)
   refundGiven?: number; // Actual refund given (for customer gets refund)

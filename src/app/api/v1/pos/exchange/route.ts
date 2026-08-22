@@ -72,13 +72,6 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json({ success: false, message: "At least one returned item is required" }, { status: 400 });
     }
-    if (
-      !body.replacementItems ||
-      !Array.isArray(body.replacementItems) ||
-      body.replacementItems.length === 0
-    ) {
-      return NextResponse.json({ success: false, message: "At least one replacement item is required" }, { status: 400 });
-    }
 
     const exchange = await processExchange(
       body,

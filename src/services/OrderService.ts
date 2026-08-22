@@ -103,11 +103,8 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     }
   }
 
-  // 🏬 RULE 2: Store / POS Order Restriction Guard (Store orders CANNOT be processed, returned, or cancelled in ERP)
-  const isStatusChanging = order.status && order.status.toLowerCase() !== existingStatusLower;
-  if (isStoreOrder && isStatusChanging) {
-    throw new AppError("Store / POS orders cannot be processed, returned, or cancelled from ERP. All store order exchanges must be handled directly through the POS system.", 400);
-  }
+  // 🏬 RULE 2: Order Editing Rules (Customer info & items can only be edited for active pending/processing orders)
+  // Status transitions (Process, Cancel, Return, Complete) are supported for all orders across ERP and POS.
 
   // 🛑 RULE 3: Order Completion Validation Guard
   if (targetStatusLower === "completed") {

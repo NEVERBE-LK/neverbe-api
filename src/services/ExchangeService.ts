@@ -75,21 +75,24 @@ export const processExchange = async (request: ExchangeRequest, userId: string, 
     (ret as any).bPrice = orig.bPrice || 0;
   }
 
-  // Fetch replacement product data for bPrice
-  const pIds = Array.from(new Set(replacementItems.map(i => i.itemId)));
-  const products = await productRepository.findByIds(pIds, true);
-  const productMap = new Map(products.map(p => [p.id, p]));
+  // Fetch replacement product data for bPrice if replacement items are provided
+  const replacementList = Array.isArray(replacementItems) ? replacementItems : [];
+  if (replacementList.length > 0) {
+    const pIds = Array.from(new Set(replacementList.map(i => i.itemId)));
+    const products = await productRepository.findByIds(pIds, true);
+    const productMap = new Map(products.map(p => [p.id, p]));
 
-  replacementItems.forEach(rep => {
-    const p = productMap.get(rep.itemId);
-    (rep as any).bPrice = p?.buyingPrice || 0;
-  });
+    replacementList.forEach(rep => {
+      const p = productMap.get(rep.itemId);
+      (rep as any).bPrice = p?.buyingPrice || 0;
+    });
+  }
 
   const returnTotal = returnedItems.reduce((s, i) => s + (i.price * i.quantity - (i.discount || 0)), 0);
-  const replacementTotal = replacementItems.reduce((s, i) => s + (i.price * i.quantity - (i.discount || 0)), 0);
+  const replacementTotal = replacementList.reduce((s, i) => s + (i.price * i.quantity - (i.discount || 0)), 0);
   const priceDifference = replacementTotal - returnTotal;
+  const creditIssued = priceDifference < 0 ? Math.abs(priceDifference) : 0;
 
-  if (priceDifference < 0) throw new AppError("Refunds not allowed in exchange", 400);
   if (priceDifference > 0 && !paymentMethod) throw new AppError("Payment method required for balance", 400);
 
   // Pre-fetch all specs/inventory doc references OUTSIDE/BEFORE the transaction to comply with Firestore read-before-write rules
@@ -101,7 +104,7 @@ export const processExchange = async (request: ExchangeRequest, userId: string, 
     retRefs[key] = await inventoryRepository.findBySpecs(ret.itemId, ret.variantId || null, ret.size, stockId);
   }
 
-  for (const rep of replacementItems) {
+  for (const rep of replacementList) {
     const key = `${rep.itemId}_${rep.variantId || ""}_${rep.size}`;
     repRefs[key] = await inventoryRepository.findBySpecs(rep.itemId, rep.variantId || null, rep.size, stockId);
   }
@@ -131,7 +134,7 @@ export const processExchange = async (request: ExchangeRequest, userId: string, 
         });
       }
     }
-    for (const rep of replacementItems) {
+    for (const rep of replacementList) {
       const key = `${rep.itemId}_${rep.variantId || ""}_${rep.size}`;
       const invRef = repRefs[key];
       if (!invRef) throw new AppError(`Inventory item not found for replacement item ${rep.name}`, 404);
@@ -150,7 +153,7 @@ export const processExchange = async (request: ExchangeRequest, userId: string, 
         if (newItems[idx].quantity <= 0) newItems.splice(idx, 1);
       }
     });
-    replacementItems.forEach(rep => {
+    replacementList.forEach(rep => {
       const idx = newItems.findIndex(i => i.itemId === rep.itemId && i.variantId === rep.variantId && i.size === rep.size);
       if (idx !== -1) newItems[idx].quantity += rep.quantity;
       else newItems.push({ ...rep, itemType: "PRODUCT" } as any);
@@ -163,11 +166,12 @@ export const processExchange = async (request: ExchangeRequest, userId: string, 
       originalOrderDocId: order.docId,
       stockId,
       returnedItems,
-      replacementItems,
+      replacementItems: replacementList,
       returnTotal,
       replacementTotal,
       priceDifference,
-      paymentMethod,
+      creditIssued,
+      paymentMethod: priceDifference > 0 ? paymentMethod : "STORE_CREDIT",
       status: "completed",
       processedBy: userId,
       processedByName: userName,
