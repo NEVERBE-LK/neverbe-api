@@ -260,6 +260,8 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     if (order.fee !== undefined) orderUpdate.fee = order.fee;
     if (order.transactionFeeCharge !== undefined) orderUpdate.transactionFeeCharge = order.transactionFeeCharge;
     if (order.paymentReceived !== undefined) orderUpdate.paymentReceived = order.paymentReceived;
+    if (order.deliveryFeePrepaid !== undefined) orderUpdate.deliveryFeePrepaid = order.deliveryFeePrepaid;
+    if (order.deliveryFeeTxnId !== undefined) orderUpdate.deliveryFeeTxnId = order.deliveryFeeTxnId;
 
     tx.update(docRef, orderUpdate);
   });

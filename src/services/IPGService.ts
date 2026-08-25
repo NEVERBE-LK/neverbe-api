@@ -117,8 +117,10 @@ export class IPGService {
       throw new Error("PayHere credentials or base URL missing in environment.");
     }
 
-    const returnUrl = `${baseUrl}/checkout/success/${orderId}`;
-    const cancelUrl = `${baseUrl}/checkout`;
+    // For FEE orders, return to the parent order's success page (strip -FEE suffix)
+    const returnOrderId = orderId.endsWith("-FEE") ? orderId.replace(/-FEE$/, "") : orderId;
+    const returnUrl = `${baseUrl}/checkout/success/${returnOrderId}`;
+    const cancelUrl = orderId.endsWith("-FEE") ? `${baseUrl}/checkout/success/${returnOrderId}` : `${baseUrl}/checkout`;
     const notifyUrl = `${apiUrl}/api/v1/web/ipg/payhere/notify`;
 
     const amountFormatted = parseFloat(amount)

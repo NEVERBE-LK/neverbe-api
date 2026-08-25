@@ -228,3 +228,16 @@ export const getOrdersByUserId = async (userId: string, limit: number = 50) => {
   const orders = await orderRepository.findByUserId(userId, limit);
   return formatListDates(orders);
 };
+
+export const markDeliveryFeePaid = async (orderId: string, paymentId: string) => {
+  const docId = await orderRepository.findDocIdByOrderId(orderId);
+  if (!docId) throw new Error(`Order ${orderId} not found.`);
+  await orderRepository.update(docId, { deliveryFeePrepaid: true, deliveryFeeTxnId: paymentId, updatedAt: FieldValue.serverTimestamp() } as any);
+  console.log("[WebOrderService] Delivery fee marked as paid for:", orderId);
+};
+
+export const getOrderPrepaidStatus = async (orderId: string) => {
+  const order = await orderRepository.findByOrderId(orderId);
+  if (!order) throw new Error(`Order ${orderId} not found.`);
+  return { deliveryFeePrepaid: order.deliveryFeePrepaid || false, riskStatus: order.riskStatus || 'NORMAL', deliveryFeeTxnId: order.deliveryFeeTxnId || null };
+};

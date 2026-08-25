@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { IPGService } from "@/services/IPGService";
-import { updatePayment } from "@/services/WebOrderService";
+import { updatePayment, markDeliveryFeePaid } from "@/services/WebOrderService";
 
 export const POST = async (req: Request) => {
   try {
@@ -55,6 +55,17 @@ export const POST = async (req: Request) => {
 
     // --- Step 4: Update payment status ---
     if (status_code === "2") {
+      // Check if this is a delivery fee prepayment (orderId ends with -FEE)
+      if (order_id.endsWith("-FEE")) {
+        const parentOrderId = order_id.replace(/-FEE$/, "");
+        console.log("✅ Delivery fee prepayment confirmed for parent order:", parentOrderId);
+        await markDeliveryFeePaid(parentOrderId, payment_id);
+        return NextResponse.json(
+          { message: "Delivery Fee Payment Successful" },
+          { status: 200 },
+        );
+      }
+
       console.log("✅ Payment successful for order:", order_id);
       await updatePayment(order_id, payment_id, "Paid");
       return NextResponse.json(

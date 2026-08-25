@@ -41,7 +41,7 @@ async function validateCaptchaGuard(req: NextRequest, bodyToken?: string): Promi
   return { valid: true };
 }
 
-async function processCustomerRisk(query: {
+export async function processCustomerRisk(query: {
   phone?: string;
   email?: string;
   name?: string;
