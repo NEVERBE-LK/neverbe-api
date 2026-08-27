@@ -142,7 +142,9 @@ export async function evaluateThirdPartyPhoneRisk(rawPhone: string, thresholdSco
     if (fraudScore >= 85 || isSpammer) riskLevel = "CRITICAL";
     else if (fraudScore >= 60 || isDisposable) riskLevel = "HIGH";
     else if (fraudScore >= 40) riskLevel = "MEDIUM";
-    const noticeMessage = isHighRisk ? "Due to high return/spam risk on past network activity, delivery fee prepayment (Rs. 450) is required for COD orders." : "";
+    const noticeMessage = isHighRisk
+      ? "Due to high return/spam risk on past network activity, delivery fee prepayment is required for COD orders."
+      : "";
     return { isHighRisk, fraudScore, riskLevel, isValid, isActive, isDisposable, isSpammer, lineType, reasons, actionRequired: isHighRisk ? actionMode : "NONE", noticeMessage };
   } catch (error: any) {
     return defaultResult;
@@ -239,7 +241,7 @@ export async function evaluateUnifiedFraudRisk(customerData: CustomerFormData, t
   else if (scaledScore >= 35) riskLevel = "MEDIUM";
 
   const allReasons = Array.from(new Set([...thirdPartyResult.reasons, ...localResult.reasons]));
-  const noticeMessage = isHighRisk ? "Due to high return/spam risk on past network activity, delivery fee prepayment (Rs. 450) is required for COD orders." : "";
+  const noticeMessage = isHighRisk ? "Due to high return/spam risk on past network activity, delivery fee prepayment is required for COD orders." : "";
 
   return { isHighRisk, fraudScore: scaledScore, probability, ipqsScore: thirdPartyResult.fraudScore, localScore: localResult.finalScore, riskLevel, isValid: thirdPartyResult.isValid, isActive: thirdPartyResult.isActive, isDisposable: thirdPartyResult.isDisposable, isSpammer: thirdPartyResult.isSpammer || localResult.subScores.historyScore >= 75, lineType: thirdPartyResult.lineType, reasons: allReasons, actionRequired: isHighRisk ? "PREPAY_DELIVERY_FEE" : "NONE", noticeMessage, algorithm: "LOGISTIC_SIGMOID_SHANNON_ENTROPY_V2" };
 }

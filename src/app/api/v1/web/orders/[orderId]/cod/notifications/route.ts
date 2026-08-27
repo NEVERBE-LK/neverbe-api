@@ -34,6 +34,21 @@ export const GET = async (
     );
 
     if (captchaVerified) {
+      // Check if order is HIGH_RISK and delivery fee is unpaid
+      const { orderRepository } = await import("@/repositories/OrderRepository");
+      const order = await orderRepository.findByOrderId(orderId);
+      
+      if (order && order.riskStatus === "HIGH_RISK" && !order.deliveryFeePrepaid) {
+        console.log("[Order Notification API] Order is HIGH_RISK and fee unpaid. Deferring notifications.");
+        return new Response(
+          JSON.stringify({
+            status: true,
+            message: "Notifications deferred due to high risk",
+          }),
+          { status: 200 }
+        );
+      }
+
       console.log("[Order Notification API] Sending order confirmed SMS...");
       await sendOrderConfirmedSMS(orderId);
       console.log("[Order Notification API] SMS sent successfully");

@@ -46,23 +46,26 @@ export class IPGService {
     const signature = signer.sign(formattedPrivateKey, "base64");
 
     return {
-      _mId: merchantId,
-      api_key: apiKey,
-      _returnUrl: returnUrl,
-      _cancelUrl: cancelUrl,
-      _responseUrl: responseUrl,
-      _amount: amount,
-      _currency: "LKR",
-      _reference: orderId,
-      _orderId: orderId,
-      _pluginName: "customapi",
-      _pluginVersion: "1.0.1",
-      _description: description,
-      _firstName: firstName,
-      _lastName: lastName,
-      _email: email,
-      dataString,
-      signature,
+      actionUrl: process.env.KOKO_REDIRECT_URL || "https://prodapi.paykoko.com/api/merchants/orderCreate",
+      payload: {
+        _mId: merchantId,
+        api_key: apiKey,
+        _returnUrl: returnUrl,
+        _cancelUrl: cancelUrl,
+        _responseUrl: responseUrl,
+        _amount: amount,
+        _currency: "LKR",
+        _reference: orderId,
+        _orderId: orderId,
+        _pluginName: "customapi",
+        _pluginVersion: "1.0.1",
+        _description: description,
+        _firstName: firstName,
+        _lastName: lastName,
+        _email: email,
+        dataString,
+        signature,
+      }
     };
   }
 
@@ -138,22 +141,25 @@ export class IPGService {
       .toUpperCase();
 
     return {
-      merchant_id: merchantId,
-      return_url: returnUrl,
-      cancel_url: cancelUrl,
-      notify_url: notifyUrl,
-      order_id: orderId,
-      items,
-      amount: amountFormatted,
-      currency,
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      phone,
-      address,
-      city,
-      country: "Sri Lanka",
-      hash,
+      actionUrl: process.env.PAYHERE_URL || "https://www.payhere.lk/pay/checkout",
+      payload: {
+        merchant_id: merchantId,
+        return_url: returnUrl,
+        cancel_url: cancelUrl,
+        notify_url: notifyUrl,
+        order_id: orderId,
+        items,
+        amount: amountFormatted,
+        currency,
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        phone,
+        address,
+        city,
+        country: "Sri Lanka",
+        hash,
+      }
     };
   }
 

@@ -215,8 +215,12 @@ export const addWebOrder = async (order: Partial<Order>) => {
       .catch(err => console.error("[Notification] Admin failed:", err));
 
     if (isCOD) {
-      sendOrderConfirmedSMS(order.orderId!).catch(err => console.error("[Notification] COD SMS failed:", err));
-      sendOrderConfirmedEmail(order.orderId!).catch(err => console.error("[Notification] COD Email failed:", err));
+      if (orderData.riskStatus === "HIGH_RISK" && !orderData.deliveryFeePrepaid) {
+        console.log("[Notification] Deferred COD notifications due to HIGH_RISK.");
+      } else {
+        sendOrderConfirmedSMS(order.orderId!).catch(err => console.error("[Notification] COD SMS failed:", err));
+        sendOrderConfirmedEmail(order.orderId!).catch(err => console.error("[Notification] COD Email failed:", err));
+      }
     }
   } catch (error) {
     console.error("❌ addWebOrder failed:", error);
@@ -234,6 +238,10 @@ export const markDeliveryFeePaid = async (orderId: string, paymentId: string) =>
   if (!docId) throw new Error(`Order ${orderId} not found.`);
   await orderRepository.update(docId, { deliveryFeePrepaid: true, deliveryFeeTxnId: paymentId, updatedAt: FieldValue.serverTimestamp() } as any);
   console.log("[WebOrderService] Delivery fee marked as paid for:", orderId);
+
+  // Send deferred notifications now that prepaid fee is paid
+  sendOrderConfirmedSMS(orderId).catch(err => console.error("[Notification] COD SMS (deferred) failed:", err));
+  sendOrderConfirmedEmail(orderId).catch(err => console.error("[Notification] COD Email (deferred) failed:", err));
 };
 
 export const getOrderPrepaidStatus = async (orderId: string) => {
