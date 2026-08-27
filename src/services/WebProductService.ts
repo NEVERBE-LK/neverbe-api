@@ -95,11 +95,20 @@ export const getNewArrivals = async (
   return { ...result, dataList: enriched };
 };
 
-// ====================== Recent Items ======================
+// ====================== Recent Items (Just Dropped) ======================
 
 export const getRecentItems = async (limit: number = 8) => {
-  const products = await productRepository.findRecent(limit);
-  return enrichProductsWithLabels(products);
+  // Logic: "Just Dropped" -> Most recently added items that are actually in stock
+  const result = await productRepository.findNewArrivals({ page: 1, size: 50 });
+  
+  // Filter for products that are currently in stock
+  const inStockProducts = result.dataList.filter(p => p.inStock === true);
+  const sliced = inStockProducts.slice(0, limit);
+  
+  // If we don't have enough in-stock new items, fallback to the absolute newest items
+  const finalProducts = sliced.length >= limit / 2 ? sliced : result.dataList.slice(0, limit);
+  
+  return enrichProductsWithLabels(finalProducts);
 };
 
 // ====================== Get Product By ID ======================
@@ -187,8 +196,28 @@ export const getPaymentMethods = async () => settingsRepository.findPaymentMetho
 // ====================== Hot & Deals ======================
 
 export const getHotProducts = async () => {
-  const itemCount = await orderRepository.countOrdersByItem(100);
-  const sortedItemIds = Object.entries(itemCount).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([itemId]) => itemId);
+  // Logic: "Popular Now" -> Same as Dashboard, most sold items in the last 30 days from paid orders
+  const endDay = new Date();
+  const startDay = new Date();
+  startDay.setDate(startDay.getDate() - 30); // Last 30 days
+
+  const orders = await orderRepository.findPaidOrdersInDateRange(startDay, endDay);
+  
+  const itemsMap = new Map<string, number>();
+  orders.forEach((order) => {
+    if (order.items && Array.isArray(order.items)) {
+      order.items.forEach((item) => {
+        const count = itemsMap.get(item.itemId) || 0;
+        itemsMap.set(item.itemId, count + item.quantity);
+      });
+    }
+  });
+
+  const sortedItemIds = Array.from(itemsMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([itemId]) => itemId);
+
   if (sortedItemIds.length === 0) return [];
 
   const products = await productRepository.findByIds(sortedItemIds);

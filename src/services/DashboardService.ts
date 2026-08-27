@@ -110,16 +110,8 @@ export const getOverviewByDateRange = async (
   endDate: Date,
 ): Promise<DashboardOverview> => {
   try {
-    // 1. Fetch orders and expenses in parallel
-    const [orders, expenses] = await Promise.all([
-      orderRepository.findByStatusInDateRange(startDate, endDate),
-      reportRepository.findExpensesForReport({
-        start: startDate,
-        end: endDate,
-        type: "expense",
-        status: "APPROVED",
-      }),
-    ]);
+    // 1. Fetch orders
+    const orders = await orderRepository.findByStatusInDateRange(startDate, endDate);
 
     // 2. Only collect product IDs for items missing bPrice
     const productIds: Set<string> = new Set();
@@ -186,8 +178,7 @@ export const getOverviewByDateRange = async (
       totalFee += orderFee;
     });
 
-    const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-    const totalProfit = totalNetSales + totalFee - totalBuyingCost - totalTransactionFee - totalExpenses;
+    const totalProfit = totalNetSales + totalFee - totalBuyingCost - totalTransactionFee;
 
     return {
       totalOrders,
