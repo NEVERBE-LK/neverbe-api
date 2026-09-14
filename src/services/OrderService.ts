@@ -107,14 +107,9 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
   // Status transitions (Process, Cancel, Return, Complete) are supported for all orders across ERP and POS.
 
   // 🛑 RULE 3: Order Completion Validation Guard
+  // Decoupled from payment status: Orders (especially COD) can be completed/dispatched while paymentStatus is Pending.
+  // Payment status transitions are handled independently via Process Payments.
   if (targetStatusLower === "completed") {
-    const targetPaymentStatus = (order.paymentStatus || existingOrder.paymentStatus || "Pending").toLowerCase();
-    const isPaid = targetPaymentStatus === "paid" || (order.paymentReceived?.reduce((sum, p) => sum + p.amount, 0) || 0) >= (order.total || existingOrder.total || 0);
-    
-    if (!isPaid) {
-      throw new AppError("Cannot mark order as Completed: Payment status must be 'Paid' before completing order.", 400);
-    }
-
     const isWebsiteOrDelivery = isWebsiteOrder || existingOrder.courier || existingOrder.trackingNumber;
     const hasCourier = Boolean(order.courier || existingOrder.courier);
     const hasTracking = Boolean((order.trackingNumber || existingOrder.trackingNumber)?.trim());
