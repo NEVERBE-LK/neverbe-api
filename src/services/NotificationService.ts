@@ -433,10 +433,17 @@ export const createAdminNotification = async (
     const notification = { type, title, message, metadata, read: false, createdAt: now.toDate() };
     await notificationRepository.createAdminNotification(docId, notification);
 
+    const stringData: Record<string, string> = {};
+    for (const [key, val] of Object.entries(metadata)) {
+      if (val !== undefined && val !== null) {
+        stringData[key] = typeof val === "object" ? JSON.stringify(val) : String(val);
+      }
+    }
+
     const payload = {
       topic: "admin_alerts",
       notification: { title, body: message },
-      data: { ...metadata },
+      data: stringData,
       webpush: { fcmOptions: { link: metadata.orderId ? `/orders/${metadata.orderId}` : "/dashboard" } }
     };
 

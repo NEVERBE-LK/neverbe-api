@@ -46,6 +46,25 @@ export const updatePayment = async (
   if (status.toLowerCase() === "paid") {
     sendOrderConfirmedSMS(orderId).catch(err => console.error("[Notification] SMS failed:", err));
     sendOrderConfirmedEmail(orderId).catch(err => console.error("[Notification] Email failed:", err));
+
+    // Send confirmed admin notification now that PayHere/IPG payment is verified
+    const order = await orderRepository.findByOrderId(orderId);
+    if (order) {
+      createAdminNotification(
+        "ORDER",
+        "New Website Order (Paid)",
+        `Order #${order.orderId?.toUpperCase()} paid via ${order.paymentMethod || "PayHere"} by ${order.customer?.name || "Customer"}.`,
+        {
+          orderId: order.orderId,
+          paymentStatus: "Paid",
+          paymentMethod: order.paymentMethod || "PayHere",
+          paymentMethodId: order.paymentMethodId,
+          status: order.status || "Processing",
+          total: order.total,
+          customerName: order.customer?.name || "Customer",
+        }
+      ).catch(err => console.error("[Notification] Admin notification failed:", err));
+    }
   }
 };
 
@@ -162,6 +181,7 @@ export const addWebOrder = async (order: Partial<Order>) => {
   }
 
   // Transaction for stock deduction and order save
+  let savedOrder: Order | null = null;
   try {
     await orderRepository.runTransaction(async (tx) => {
       if (order.items) {
@@ -200,6 +220,7 @@ export const addWebOrder = async (order: Partial<Order>) => {
       } as Order;
 
       await orderRepository.create(order.orderId!, orderData, tx);
+      savedOrder = orderData;
     });
 
     // Post-transaction tasks
@@ -211,12 +232,36 @@ export const addWebOrder = async (order: Partial<Order>) => {
     }
     if (isCOD && userPhone) await consumeOTPVerification(userPhone);
 
-    // Run notifications asynchronously to avoid blocking the user
-    createAdminNotification("ORDER", "New Website Order", `Order #${order.orderId?.toUpperCase()} placed by ${order.customer?.name || "Guest"}.`, { orderId: order.orderId })
-      .catch(err => console.error("[Notification] Admin failed:", err));
+    // Guard admin notification:
+    // Only send confirmed notification if:
+    // 1. Payment is already Paid (online gateway confirmed)
+    // 2. COD order (unless high-risk requiring delivery fee prepayment first)
+    const paymentStatusLower = (savedOrder?.paymentStatus || order.paymentStatus || "").toLowerCase();
+    const isPaid = paymentStatusLower === "paid" || paymentStatusLower === "completed";
+    const isHighRiskPendingCOD = isCOD && savedOrder?.riskStatus === "HIGH_RISK" && !savedOrder?.deliveryFeePrepaid;
+    const shouldNotifyAdmin = (isCOD && !isHighRiskPendingCOD) || isPaid;
+
+    if (shouldNotifyAdmin) {
+      createAdminNotification(
+        "ORDER",
+        isPaid ? "New Website Order (Paid)" : "New Website Order (COD)",
+        `Order #${order.orderId?.toUpperCase()} placed by ${order.customer?.name || "Guest"}.`,
+        {
+          orderId: order.orderId,
+          paymentStatus: isPaid ? "Paid" : (savedOrder?.paymentStatus || order.paymentStatus || "Pending"),
+          paymentMethod: savedOrder?.paymentMethod || order.paymentMethod || (isCOD ? "COD" : "Online"),
+          paymentMethodId: savedOrder?.paymentMethodId || order.paymentMethodId || (isCOD ? "PM-001" : undefined),
+          status: savedOrder?.status || order.status || "Pending",
+          total: savedOrder?.total || order.total,
+          customerName: order.customer?.name || "Guest",
+        }
+      ).catch(err => console.error("[Notification] Admin failed:", err));
+    } else {
+      console.log(`[Notification] Suppressed confirmed admin notification for order #${order.orderId} (Payment Status: ${savedOrder?.paymentStatus || order.paymentStatus || "Pending"}, Method: ${order.paymentMethod || "PayHere/Online"}) until payment is confirmed.`);
+    }
 
     if (isCOD) {
-      if (orderData.riskStatus === "HIGH_RISK" && !orderData.deliveryFeePrepaid) {
+      if (isHighRiskPendingCOD) {
         console.log("[Notification] Deferred COD notifications due to HIGH_RISK.");
       } else {
         sendOrderConfirmedSMS(order.orderId!).catch(err => console.error("[Notification] COD SMS failed:", err));
@@ -243,6 +288,24 @@ export const markDeliveryFeePaid = async (orderId: string, paymentId: string) =>
   // Send deferred notifications now that prepaid fee is paid
   sendOrderConfirmedSMS(orderId).catch(err => console.error("[Notification] COD SMS (deferred) failed:", err));
   sendOrderConfirmedEmail(orderId).catch(err => console.error("[Notification] COD Email (deferred) failed:", err));
+
+  const order = await orderRepository.findByOrderId(orderId);
+  if (order) {
+    createAdminNotification(
+      "ORDER",
+      "New COD Order (Prepaid Fee Paid)",
+      `Order #${order.orderId?.toUpperCase()} confirmed (Delivery Fee Paid) by ${order.customer?.name || "Customer"}.`,
+      {
+        orderId: order.orderId,
+        paymentStatus: order.paymentStatus || "Pending",
+        paymentMethod: "COD",
+        paymentMethodId: order.paymentMethodId || "PM-001",
+        status: order.status || "Pending",
+        total: order.total,
+        customerName: order.customer?.name || "Customer",
+      }
+    ).catch(err => console.error("[Notification] Admin notification failed:", err));
+  }
 };
 
 export const getOrderPrepaidStatus = async (orderId: string) => {

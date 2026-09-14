@@ -8,7 +8,7 @@ import { notificationRepository } from "@/repositories/NotificationRepository";
  */
 export async function GET(req: Request) {
   try {
-    await requirePermission(req, "view_communications");
+    await requirePermission(req);
 
     const notifications = await notificationRepository.getAdminNotifications(20);
 
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
  */
 export async function PATCH(req: Request) {
   try {
-    await requirePermission(req, "view_communications");
+    await requirePermission(req);
 
     const { id, all } = await req.json();
 
