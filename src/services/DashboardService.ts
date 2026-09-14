@@ -145,22 +145,39 @@ export const getOverviewByDateRange = async (
     orders.forEach((order) => {
       totalOrders++;
       const orderTotal = order.total || 0;
-      const orderDiscount = order.discount || 0;
       const orderShippingFee = order.shippingFee || 0;
       const orderTransactionFee = order.transactionFeeCharge || 0;
       const orderFee = order.fee || 0;
 
-      // Calculate gross sales using actual item selling prices (item.price)
-      let orderGross = 0;
-      if (Array.isArray(order.items) && order.items.length > 0) {
-        orderGross = order.items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0);
-      } else {
-        orderGross = Math.max(0, orderTotal + orderDiscount - orderShippingFee - orderFee);
+      // 1. Calculate true Net Sales (actual revenue realized from products after all discounts, excluding shipping & customer fee)
+      let orderNetSale = 0;
+      if (orderTotal > 0) {
+        orderNetSale = Math.max(0, orderTotal - orderShippingFee - orderFee);
+      } else if (Array.isArray(order.items) && order.items.length > 0) {
+        orderNetSale = order.items.reduce((sum, item) => {
+          const unitPrice = item.price || 0;
+          const unitDiscount = item.discount || 0;
+          return sum + Math.max(0, unitPrice - unitDiscount) * (item.quantity || 1);
+        }, 0);
       }
 
-      // Net Sale = orderGross - orderDiscount
-      const netSale = orderGross - orderDiscount;
-      totalNetSales += netSale;
+      // 2. Calculate Gross Sales (full retail price of goods before discounts)
+      const itemsGross = Array.isArray(order.items) && order.items.length > 0
+        ? order.items.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0)
+        : 0;
+
+      // 3. Calculate all discounts (item-level, order-level, coupon, promotion)
+      const itemDiscounts = Array.isArray(order.items) && order.items.length > 0
+        ? order.items.reduce((sum, item) => sum + (item.discount || 0) * (item.quantity || 1), 0)
+        : 0;
+      const orderLevelDiscounts = (order.discount || 0) + (order.couponDiscount || 0) + (order.promotionDiscount || 0);
+      const discountFromGross = itemsGross > orderNetSale ? itemsGross - orderNetSale : 0;
+      const orderDiscount = Math.max(discountFromGross, itemDiscounts, orderLevelDiscounts);
+
+      // Gross Sales is at least itemsGross or Net Sales + Discount
+      const orderGross = Math.max(itemsGross, orderNetSale + orderDiscount);
+
+      totalNetSales += orderNetSale;
       totalGrossSales += orderGross;
       totalShipping += orderShippingFee;
       totalDiscount += orderDiscount;
@@ -372,10 +389,6 @@ export const getYearlySalesPerformance = async (year?: number): Promise<YearlySa
     }
   });
 
-  if (currentYear === 2026) {
-    websiteOrders[7] += 2;
-  }
-
   return { website: websiteOrders, store: storeOrders, year: currentYear };
 };
 
@@ -448,15 +461,9 @@ export const getMonthlyComparison = async (): Promise<MonthlyComparison> => {
     getOverviewByDateRange(lastMonthStart, lastMonthEnd),
   ]);
 
-  if (now.month() === 7 && now.year() === 2026) {
-    currentData.totalOrders += 2;
-  } else if (now.month() === 8 && now.year() === 2026) {
-    lastData.totalOrders += 2;
-  }
-
   const calcChange = (current: number, last: number): number => {
     if (last === 0) return current > 0 ? 100 : 0;
-    return Math.round(((current - last) / last) * 100);
+    return Math.round(((current - last) / Math.abs(last)) * 100);
   };
 
   return {
@@ -485,10 +492,6 @@ export const getOrderStatusDistribution = async (): Promise<OrderStatusDistribut
     else if (status === "completed") distribution.completed++;
     else if (status === "cancelled") distribution.cancelled++;
   });
-
-  if (now.month() === 7 && now.year() === 2026) {
-    distribution.completed += 2;
-  }
 
   return distribution;
 };

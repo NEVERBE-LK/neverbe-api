@@ -188,7 +188,8 @@ export const addWebOrder = async (order: Partial<Order>) => {
         appliedPromotionId: appliedPromotionIds[0] || null,
         appliedPromotionIds,
         promotionDiscount,
-        discount: finalDiscount,
+        couponDiscount: finalDiscount,
+        discount: Math.max(order.discount || 0, (finalDiscount || 0) + (promotionDiscount || 0)),
         createdAt: now as any,
         updatedAt: now as any,
         customer: {

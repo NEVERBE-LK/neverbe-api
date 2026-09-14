@@ -42,16 +42,37 @@ export const getDailySaleReport = async (
         return orderDate.isSame(currentDate, "day");
       });
 
+      let dayGrossSales = 0;
+      let dayDiscounts = 0;
+      let dayShipping = 0;
+
+      dayOrders.forEach((o) => {
+        const orderTotal = o.total || 0;
+        const shippingFee = o.shippingFee || 0;
+        const orderFee = (o as any).fee || 0;
+        const orderNetSale = Math.max(0, orderTotal - shippingFee - orderFee);
+        const itemsGross = Array.isArray(o.items) && o.items.length > 0
+          ? o.items.reduce((sum: number, item: any) => sum + (item.price || 0) * (item.quantity || 1), 0)
+          : 0;
+        const itemDiscounts = Array.isArray(o.items) && o.items.length > 0
+          ? o.items.reduce((sum: number, item: any) => sum + (item.discount || 0) * (item.quantity || 1), 0)
+          : 0;
+        const orderLevelDiscounts = (o.discount || 0) + (o.couponDiscount || 0) + (o.promotionDiscount || 0);
+        const discountFromGross = itemsGross > orderNetSale ? itemsGross - orderNetSale : 0;
+        const discount = Math.max(discountFromGross, itemDiscounts, orderLevelDiscounts);
+        const gross = Math.max(itemsGross, orderNetSale + discount);
+
+        dayGrossSales += gross;
+        dayDiscounts += discount;
+        dayShipping += shippingFee;
+      });
+
       const stats = {
         date: dateStr,
         orderCount: dayOrders.length,
-        grossSales: dayOrders.reduce((sum, o) => sum + (o.total || 0), 0),
-        discounts: dayOrders.reduce(
-          (sum, o) =>
-            sum + (o.couponDiscount || 0) + (o.promotionDiscount || 0),
-          0,
-        ),
-        shipping: dayOrders.reduce((sum, o) => sum + (o.shippingFee || 0), 0),
+        grossSales: dayGrossSales,
+        discounts: dayDiscounts,
+        shipping: dayShipping,
       };
 
       report.push(stats);
@@ -632,11 +653,18 @@ export const getFinancialHealthReport = async (from: string, to: string) => {
       const orderTotal = order.total || 0;
       const shippingFee = order.shippingFee || 0;
       const orderFee = (order as any).fee || 0;
-      const discount = (order.discount || 0) + (order.couponDiscount || 0) + (order.promotionDiscount || 0);
+      const orderNetSale = Math.max(0, orderTotal - shippingFee - orderFee);
 
-      // Per order calculations
-      const orderNetSale = orderTotal - shippingFee - orderFee;
-      const orderGrossSale = orderNetSale + discount;
+      const itemsGross = Array.isArray(order.items) && order.items.length > 0
+        ? order.items.reduce((sum: number, item: any) => sum + (item.price || 0) * (item.quantity || 1), 0)
+        : 0;
+      const itemDiscounts = Array.isArray(order.items) && order.items.length > 0
+        ? order.items.reduce((sum: number, item: any) => sum + (item.discount || 0) * (item.quantity || 1), 0)
+        : 0;
+      const orderLevelDiscounts = (order.discount || 0) + (order.couponDiscount || 0) + (order.promotionDiscount || 0);
+      const discountFromGross = itemsGross > orderNetSale ? itemsGross - orderNetSale : 0;
+      const discount = Math.max(discountFromGross, itemDiscounts, orderLevelDiscounts);
+      const orderGrossSale = Math.max(itemsGross, orderNetSale + discount);
 
       netSales += orderNetSale;
       grossSales += orderGrossSale;
@@ -892,10 +920,6 @@ export const getCashFlowReport = async (from: string, to: string) => {
       byMethod: Array.from(methodMap.values()),
       daily,
     };
-
-    if (dayjs(start).isBefore(dayjs('2026-09-01')) && dayjs(end).isAfter(dayjs('2026-07-31'))) {
-       summary.totalOrders += 2;
-    }
 
     return { summary };
   } catch (error: any) {
