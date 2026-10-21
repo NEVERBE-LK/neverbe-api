@@ -47,19 +47,20 @@ export const updatePayment = async (
     sendOrderConfirmedSMS(orderId).catch(err => console.error("[Notification] SMS failed:", err));
     sendOrderConfirmedEmail(orderId).catch(err => console.error("[Notification] Email failed:", err));
 
-    // Send confirmed admin notification now that PayHere/IPG payment is verified
+    // Send confirmed admin notification now that PayHere/Koko IPG payment is verified
     const order = await orderRepository.findByOrderId(orderId);
     if (order) {
+      const pMethod = order.paymentMethod || (order.paymentMethodId === "PM-006" ? "Koko" : "PayHere");
       createAdminNotification(
         "ORDER",
-        "New Website Order (Paid)",
-        `Order #${order.orderId?.toUpperCase()} paid via ${order.paymentMethod || "PayHere"} by ${order.customer?.name || "Customer"}.`,
+        `New Website Order (Paid - ${pMethod})`,
+        `Order #${order.orderId?.toUpperCase()} paid via ${pMethod} by ${order.customer?.name || "Customer"}.`,
         {
           orderId: order.orderId,
           paymentStatus: "Paid",
-          paymentMethod: order.paymentMethod || "PayHere",
+          paymentMethod: pMethod,
           paymentMethodId: order.paymentMethodId,
-          status: order.status || "Processing",
+          status: "Processing",
           total: order.total,
           customerName: order.customer?.name || "Customer",
         }
@@ -73,7 +74,11 @@ export const addWebOrder = async (order: Partial<Order>) => {
   if (!order.items?.length) throw new AppError("Order items are required", 400);
 
   // OTP Check for COD
-  const isCOD = order.paymentMethodId === "PM-001";
+  const isCOD =
+    order.paymentMethodId === "PM-001" ||
+    (order.paymentMethod &&
+      (order.paymentMethod.toLowerCase() === "cod" ||
+        order.paymentMethod.toLowerCase().includes("cash on delivery")));
   const userPhone = order.customer?.phone;
   if (isCOD) {
     if (!userPhone) throw new AppError("Phone number is required for COD", 400);
@@ -233,31 +238,33 @@ export const addWebOrder = async (order: Partial<Order>) => {
     if (isCOD && userPhone) await consumeOTPVerification(userPhone);
 
     // Guard admin notification:
-    // Only send confirmed notification if:
-    // 1. Payment is already Paid (online gateway confirmed)
-    // 2. COD order (unless high-risk requiring delivery fee prepayment first)
+    // Requirement: COD orders and paid PayHere/Koko orders are eligible; non-paid PayHere/Koko are suppressed.
     const paymentStatusLower = (savedOrder?.paymentStatus || order.paymentStatus || "").toLowerCase();
     const isPaid = paymentStatusLower === "paid" || paymentStatusLower === "completed";
     const isHighRiskPendingCOD = isCOD && savedOrder?.riskStatus === "HIGH_RISK" && !savedOrder?.deliveryFeePrepaid;
-    const shouldNotifyAdmin = (isCOD && !isHighRiskPendingCOD) || isPaid;
+    
+    // Explicit rule: COD is eligible (unless high-risk pending prepayment).
+    // Online orders (PayHere, Koko, etc.) are ONLY eligible if Paid. Non-paid online orders MUST NEVER notify!
+    const shouldNotifyAdmin = (isCOD && !isHighRiskPendingCOD) || (!isCOD && isPaid);
 
     if (shouldNotifyAdmin) {
+      const pMethod = isCOD ? "COD" : (savedOrder?.paymentMethod || order.paymentMethod || "Online");
       createAdminNotification(
         "ORDER",
-        isPaid ? "New Website Order (Paid)" : "New Website Order (COD)",
-        `Order #${order.orderId?.toUpperCase()} placed by ${order.customer?.name || "Guest"}.`,
+        isPaid ? `New Website Order (Paid - ${pMethod})` : "New Website Order (COD)",
+        `Order #${order.orderId?.toUpperCase()} placed via ${pMethod} by ${order.customer?.name || "Guest"}.`,
         {
           orderId: order.orderId,
           paymentStatus: isPaid ? "Paid" : (savedOrder?.paymentStatus || order.paymentStatus || "Pending"),
-          paymentMethod: savedOrder?.paymentMethod || order.paymentMethod || (isCOD ? "COD" : "Online"),
+          paymentMethod: pMethod,
           paymentMethodId: savedOrder?.paymentMethodId || order.paymentMethodId || (isCOD ? "PM-001" : undefined),
-          status: savedOrder?.status || order.status || "Pending",
+          status: savedOrder?.status || order.status || (isPaid ? "Processing" : "Pending"),
           total: savedOrder?.total || order.total,
           customerName: order.customer?.name || "Guest",
         }
       ).catch(err => console.error("[Notification] Admin failed:", err));
     } else {
-      console.log(`[Notification] Suppressed confirmed admin notification for order #${order.orderId} (Payment Status: ${savedOrder?.paymentStatus || order.paymentStatus || "Pending"}, Method: ${order.paymentMethod || "PayHere/Online"}) until payment is confirmed.`);
+      console.log(`[Notification] Suppressed notification for non-paid order #${order.orderId} (Payment Status: ${savedOrder?.paymentStatus || order.paymentStatus || "Pending"}, Method: ${order.paymentMethod || "PayHere/Koko"}) until payment is confirmed.`);
     }
 
     if (isCOD) {

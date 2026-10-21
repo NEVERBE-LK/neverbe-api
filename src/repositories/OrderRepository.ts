@@ -123,11 +123,15 @@ export class OrderRepository extends BaseRepository<Order> {
     paymentId: string,
     status: string,
   ): Promise<Order> {
-    await this.collection.doc(docId).update({
+    const updateData: any = {
       paymentId,
       paymentStatus: status,
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+    if (status.toLowerCase() === "paid") {
+      updateData.status = "Processing";
+    }
+    await this.collection.doc(docId).update(updateData);
 
     const doc = await this.collection.doc(docId).get();
     return doc.data() as Order;
