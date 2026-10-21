@@ -314,6 +314,31 @@ export class OrderRepository extends BaseRepository<Order> {
   }
 
   /**
+   * Count processing website orders
+   */
+  async countProcessingWebsiteOrders(): Promise<number> {
+    const snapshot = await this.collection
+      .where("from", "==", "Website")
+      .where("status", "==", "Processing")
+      .count()
+      .get();
+    return snapshot.data().count;
+  }
+
+  /**
+   * Count today's store orders
+   */
+  async countTodayStoreOrders(stockId: string, startOfToday: Date): Promise<number> {
+    const snapshot = await this.collection
+      .where("stockId", "==", stockId)
+      .where("createdAt", ">=", startOfToday)
+      .count()
+      .get();
+    return snapshot.data().count;
+  }
+
+
+  /**
    * Save order with retry logic
    */
   async saveWithRetry(id: string, data: Order, maxAttempts: number = 3): Promise<void> {
