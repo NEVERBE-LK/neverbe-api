@@ -112,15 +112,36 @@ export const processExchange = async (request: ExchangeRequest, userId: string, 
   const exchangeId = `EXC-${nanoid(8).toUpperCase()}`;
 
   await exchangeRepository.runTransaction(async (tx) => {
-    // 1. Update Inventory
+    // 0. Pre-read inventory snapshots for returned items (READ before any writes)
+    const retSnaps: Record<string, FirebaseFirestore.DocumentSnapshot> = {};
     for (const ret of returnedItems) {
       const key = `${ret.itemId}_${ret.variantId || ""}_${ret.size}`;
       const invRef = retRefs[key];
       if (invRef) {
-        tx.update(invRef, {
-          quantity: FieldValue.increment(ret.quantity),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
+        retSnaps[key] = await tx.get(invRef);
+      }
+    }
+
+    // 1. Update Inventory (WRITE)
+    for (const ret of returnedItems) {
+      const key = `${ret.itemId}_${ret.variantId || ""}_${ret.size}`;
+      const invRef = retRefs[key];
+      if (invRef) {
+        const invSnap = retSnaps[key];
+        const currentQty = invSnap?.exists ? Number(invSnap.data()?.quantity ?? 0) : 0;
+        if (currentQty <= 0) {
+          // Rule: On minus/zero stock items, prevent stock reversal from exceeding 0
+          const newQty = Math.min(0, currentQty + ret.quantity);
+          tx.update(invRef, {
+            quantity: newQty,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        } else {
+          tx.update(invRef, {
+            quantity: FieldValue.increment(ret.quantity),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
       } else {
         const newRef = inventoryRepository.getDocRef();
         tx.set(newRef, {

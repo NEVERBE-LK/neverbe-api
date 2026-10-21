@@ -166,8 +166,9 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
     if (!orderDoc.exists) throw new AppError(`Order with ID ${orderId} not found`, 404);
     const currentOrder = orderDoc.data() as Order;
 
-    // --- READ ALL PRODUCTS FIRST (before any writes) ---
+    // --- READ ALL PRODUCTS AND INVENTORIES FIRST (before any writes) ---
     const productRefs: Record<string, FirebaseFirestore.DocumentSnapshot> = {};
+    const invSnaps: Record<string, FirebaseFirestore.DocumentSnapshot> = {};
     if (stockId) {
       const uniqueProductIds = new Set<string>();
       for (const key of allKeys) {
@@ -176,6 +177,10 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
         const newQty = newQtys[key] || 0;
         if (newQty - oldQty !== 0) {
           uniqueProductIds.add(productId);
+          const invRef = invRefs[key];
+          if (invRef) {
+            invSnaps[key] = await tx.get(invRef);
+          }
         }
       }
 
@@ -203,12 +208,23 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
               updatedAt: FieldValue.serverTimestamp(),
             });
           } else if (diff < 0) {
-            // Restore stock
+            // Restore stock (with minus stock protection)
             if (invRef) {
-              tx.update(invRef, {
-                quantity: FieldValue.increment(Math.abs(diff)),
-                updatedAt: FieldValue.serverTimestamp(),
-              });
+              const invSnap = invSnaps[key];
+              const currentQty = invSnap?.exists ? Number(invSnap.data()?.quantity ?? 0) : 0;
+              if (currentQty <= 0) {
+                // Rule: On minus/zero stock items, prevent stock reversal from exceeding 0
+                const newQty = Math.min(0, currentQty + Math.abs(diff));
+                tx.update(invRef, {
+                  quantity: newQty,
+                  updatedAt: FieldValue.serverTimestamp(),
+                });
+              } else {
+                tx.update(invRef, {
+                  quantity: FieldValue.increment(Math.abs(diff)),
+                  updatedAt: FieldValue.serverTimestamp(),
+                });
+              }
             }
           }
 
@@ -216,7 +232,7 @@ export const updateOrder = async (order: Order & { sendNotification?: boolean },
           const pSnap = productRefs[productId];
           if (pSnap && pSnap.exists) {
             const data = pSnap.data() as any;
-            const newTotal = (data.totalStock ?? 0) - diff;
+            const newTotal = Math.max(0, (data.totalStock ?? 0) - diff);
             tx.update(pSnap.ref, {
               totalStock: newTotal,
               inStock: newTotal > 0,

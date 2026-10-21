@@ -1,6 +1,6 @@
 import { BaseRepository } from "./BaseRepository";
 import type { InventoryItem } from "@/model/InventoryItem";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Transaction } from "firebase-admin/firestore";
 
 /**
  * Inventory Repository - handles all stock and inventory data access
@@ -141,7 +141,19 @@ export class InventoryRepository extends BaseRepository<InventoryItem> {
     quantity: number
   ) {
     const invRef = await this.findBySpecs(productId, variantId, size, stockId);
-    if (!invRef) throw new Error("Inventory item not found");
+    if (!invRef) {
+      const newRef = this.collection.doc();
+      (tx as any).set(newRef, {
+        productId,
+        variantId: variantId || null,
+        size,
+        stockId,
+        quantity: -quantity,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return;
+    }
 
     (tx as any).update(invRef, {
       quantity: FieldValue.increment(-quantity),
@@ -151,6 +163,7 @@ export class InventoryRepository extends BaseRepository<InventoryItem> {
 
   /**
    * Restore stock for a specific item (Transaction safe)
+   * Prevents stock reversal on minus stock items from exceeding 0 (so 0-stock items cannot become positive real stock)
    */
   async restoreStock(
     tx: FirebaseFirestore.Transaction | FirebaseFirestore.WriteBatch,
@@ -158,10 +171,28 @@ export class InventoryRepository extends BaseRepository<InventoryItem> {
     variantId: string | null,
     size: string,
     stockId: string,
-    quantity: number
+    quantity: number,
+    options?: { isMinusStock?: boolean; capAtZero?: boolean }
   ) {
     const invRef = await this.findBySpecs(productId, variantId, size, stockId);
     if (!invRef) return;
+
+    if (tx instanceof Transaction) {
+      const snap = await tx.get(invRef);
+      if (snap.exists) {
+        const currentQty = Number(snap.data()?.quantity ?? 0);
+        // Rule: If item was marked as minus stock, or capAtZero is requested,
+        // or current stock is negative, cap at 0 so it can never become positive real stock
+        if (options?.isMinusStock || options?.capAtZero || currentQty < 0) {
+          const newQty = Math.min(0, currentQty + quantity);
+          tx.update(invRef, {
+            quantity: newQty,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          return;
+        }
+      }
+    }
 
     (tx as any).update(invRef, {
       quantity: FieldValue.increment(quantity),

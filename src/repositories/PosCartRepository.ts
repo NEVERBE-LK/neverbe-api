@@ -27,30 +27,61 @@ export class PosCartRepository extends BaseRepository<POSCartItem> {
    */
   async findSpecificItem(
     tx: FirebaseFirestore.Transaction | FirebaseFirestore.WriteBatch,
-    filters: { itemId: string; variantId: string; size: string; stockId: string; userId: string }
+    filters: { itemId: string; variantId: string | null; size: string; stockId: string; userId: string }
   ): Promise<FirebaseFirestore.DocumentSnapshot | null> {
-    const query = this.collection
+    let query = this.collection
       .where("itemId", "==", filters.itemId)
-      .where("variantId", "==", filters.variantId)
       .where("size", "==", filters.size)
       .where("stockId", "==", filters.stockId)
-      .where("userId", "==", filters.userId)
-      .limit(1);
+      .where("userId", "==", filters.userId);
+
+    if (filters.variantId !== undefined) {
+      query = query.where("variantId", "==", filters.variantId || null);
+    }
+
+    query = query.limit(1);
 
     const snap = tx instanceof Transaction ? await tx.get(query) : await query.get();
     return snap.empty ? null : snap.docs[0];
   }
 
   /**
-   * Add item to cart
+   * Add item to cart (merges into existing document if present)
    */
-  async addItem(tx: FirebaseFirestore.Transaction, item: POSCartItem, userId: string) {
-    const docRef = this.collection.doc();
-    tx.set(docRef, {
-      ...item,
-      userId: userId || "anonymous",
-      createdAt: FieldValue.serverTimestamp(),
-    });
+  async addItem(
+    tx: FirebaseFirestore.Transaction,
+    item: POSCartItem,
+    userId: string,
+    existingDocSnap?: FirebaseFirestore.DocumentSnapshot | null
+  ) {
+    const existingSnap = existingDocSnap !== undefined
+      ? existingDocSnap
+      : await this.findSpecificItem(tx, {
+          itemId: item.itemId,
+          variantId: item.variantId || null,
+          size: item.size,
+          stockId: item.stockId,
+          userId: userId || "anonymous",
+        });
+
+    if (existingSnap && existingSnap.exists) {
+      const existingData = existingSnap.data() as POSCartItem;
+      tx.update(existingSnap.ref, {
+        quantity: (existingData.quantity || 0) + (item.quantity || 1),
+        isMinusStock: item.isMinusStock || (existingData.isMinusStock ?? false),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } else {
+      const docRef = this.collection.doc();
+      tx.set(docRef, {
+        ...item,
+        variantId: item.variantId || null,
+        isMinusStock: item.isMinusStock ?? false,
+        userId: userId || "anonymous",
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   /**

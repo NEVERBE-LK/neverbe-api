@@ -28,6 +28,7 @@ export interface POSCartItem {
   price: number;
   bPrice: number;
   stockId: string;
+  isMinusStock?: boolean;
   createdAt?: FirebaseFirestore.Timestamp;
 }
 
@@ -57,27 +58,60 @@ export const getPosCart = async (stockId: string, userId: string): Promise<POSCa
 
 export const addItemToPosCart = async (item: POSCartItem, userId: string) => {
   await posCartRepository.runTransaction(async (tx) => {
-    // 1️⃣ Deduct stock using repository
+    // 1️⃣ Pre-read inventory to determine if this is a minus/zero stock item (READ)
+    const invRef = await inventoryRepository.findBySpecs(
+      item.itemId,
+      item.variantId || null,
+      item.size,
+      item.stockId
+    );
+
+    let isMinusStock = item.isMinusStock ?? false;
+    if (invRef) {
+      const invSnap = await tx.get(invRef);
+      if (invSnap.exists) {
+        const currentQty = Number(invSnap.data()?.quantity ?? 0);
+        isMinusStock = currentQty <= 0;
+      }
+    } else {
+      isMinusStock = true;
+    }
+
+    // 2️⃣ Pre-read existing cart document (READ before any writes)
+    const existingCartSnap = await posCartRepository.findSpecificItem(tx, {
+      itemId: item.itemId,
+      variantId: item.variantId || null,
+      size: item.size,
+      stockId: item.stockId,
+      userId: userId || "anonymous",
+    });
+
+    // 3️⃣ Deduct stock using repository (WRITE)
     await inventoryRepository.deductStock(
       tx,
       item.itemId,
-      item.variantId,
+      item.variantId || null,
       item.size,
       item.stockId,
       item.quantity
     );
 
-    // 2️⃣ Add to POS cart using repository
-    await posCartRepository.addItem(tx, item, userId);
+    // 4️⃣ Add or update POS cart using repository (WRITE)
+    await posCartRepository.addItem(
+      tx,
+      { ...item, isMinusStock },
+      userId,
+      existingCartSnap
+    );
   });
 };
 
 export const removeFromPosCart = async (item: POSCartItem, userId: string) => {
   await posCartRepository.runTransaction(async (tx) => {
-    // 1️⃣ Fetch cart item
+    // 1️⃣ Fetch cart item (READ)
     const cartDoc = await posCartRepository.findSpecificItem(tx, {
       itemId: item.itemId,
-      variantId: item.variantId,
+      variantId: item.variantId || null,
       size: item.size,
       stockId: item.stockId,
       userId: userId
@@ -86,18 +120,21 @@ export const removeFromPosCart = async (item: POSCartItem, userId: string) => {
     if (!cartDoc) throw new AppError("Cart item not found", 404);
 
     const cartItemData = cartDoc.data() as POSCartItem;
+    const isMinus = cartItemData.isMinusStock ?? item.isMinusStock ?? false;
 
-    // 2️⃣ Restore stock using repository
+    // 2️⃣ Restore stock using repository (WRITE)
+    // Rule: On minus stock items, prevent stock reversal from exceeding 0 so 0-stock items cannot go plus
     await inventoryRepository.restoreStock(
       tx,
       item.itemId,
-      item.variantId,
+      item.variantId || null,
       item.size,
       item.stockId,
-      cartItemData.quantity
+      cartItemData.quantity,
+      { isMinusStock: isMinus, capAtZero: isMinus }
     );
 
-    // 3️⃣ Delete item from POS cart
+    // 3️⃣ Delete item from POS cart (WRITE)
     await posCartRepository.delete(cartDoc.id, tx);
   });
 };
@@ -111,13 +148,18 @@ export const clearPosCart = async (stockId: string, userId: string, restock: boo
       if (restock) {
         for (const doc of snap.docs) {
           const item = doc.data() as POSCartItem;
+          // Rule: If item was a minus stock item, skip restocking to prevent 0-stock items going plus
+          if (item.isMinusStock) {
+            continue;
+          }
           await inventoryRepository.restoreStock(
             batch,
             item.itemId,
-            item.variantId,
+            item.variantId || null,
             item.size,
             item.stockId,
-            item.quantity
+            item.quantity,
+            { isMinusStock: false }
           );
         }
       }
