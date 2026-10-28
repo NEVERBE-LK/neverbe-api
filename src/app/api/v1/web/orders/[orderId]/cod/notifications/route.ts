@@ -38,7 +38,10 @@ export const GET = async (
       const { orderRepository } = await import("@/repositories/OrderRepository");
       const order = await orderRepository.findByOrderId(orderId);
       
-      if (order && order.riskStatus === "HIGH_RISK" && !order.deliveryFeePrepaid) {
+      const isCOD =
+        (order?.paymentMethod || "").toLowerCase().includes("cod") ||
+        (order?.paymentMethod || "").toLowerCase().includes("cash on delivery");
+      if (order && isCOD && order.riskStatus === "HIGH_RISK" && !order.deliveryFeePrepaid) {
         console.log("[Order Notification API] Order is HIGH_RISK and fee unpaid. Deferring notifications.");
         return new Response(
           JSON.stringify({
