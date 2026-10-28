@@ -207,6 +207,32 @@ export class ComboRepository extends BaseRepository<ComboProduct> {
   }
 
   /**
+   * Find paginated combos for web
+   */
+  async findPaginated(page: number = 1, pageSize: number = 6): Promise<{ data: ComboProduct[]; total: number; totalPages: number }> {
+    const activeCombos = await this.findActiveWithThumbnails();
+    const total = activeCombos.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const start = (page - 1) * pageSize;
+    const data = activeCombos.slice(start, start + pageSize);
+    return { data, total, totalPages };
+  }
+
+  /**
+   * Validate selection for combo
+   */
+  validateSelection(
+    combo: any,
+    selections: { productId: string; variantId: string; size: string }[]
+  ): { valid: boolean; error?: string } {
+    if (!combo || !combo.products) return { valid: false, error: "Invalid bundle" };
+    if (!selections || selections.length !== combo.products.length) {
+      return { valid: false, error: `Please select options for all ${combo.products.length} items in the bundle` };
+    }
+    return { valid: true };
+  }
+
+  /**
    * Soft delete combo
    */
   async softDelete(id: string): Promise<void> {

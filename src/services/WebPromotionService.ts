@@ -13,10 +13,14 @@ import { parseToDayjs } from "./UtilService";
  */
 
 interface CartItem {
-  itemId: string;
+  itemId?: string;
+  productId?: string;
   variantId: string;
   quantity: number;
   price: number;
+  discount?: number;
+  category?: string;
+  brand?: string;
 }
 
 // ====================== Simple Delegations ======================
@@ -46,7 +50,8 @@ export const validateCoupon = async (
   code: string,
   userId: string | null,
   cartTotal: number,
-  cartItems: CartItem[]
+  cartItems: CartItem[],
+  customerInfo?: { phone?: string; email?: string }
 ): Promise<{
   valid: boolean;
   discount: number;
@@ -100,36 +105,47 @@ export const validateCoupon = async (
   }
 
   // 5. Per User Limit
-  if (userId && coupon.perUserLimit) {
-    const usageCount = await couponRepository.getUserUsageCount(
-      coupon.id,
-      userId
-    );
-    if (usageCount >= coupon.perUserLimit) {
-      return {
-        valid: false,
-        discount: 0,
-        message: "You have already used this coupon",
-      };
+  if (coupon.perUserLimit) {
+    const identifiersToCheck = [
+      userId && userId !== "guest" ? userId : null,
+      customerInfo?.phone || null,
+      customerInfo?.email || null,
+    ].filter(Boolean) as string[];
+
+    for (const identifier of identifiersToCheck) {
+      const usageCount = await couponRepository.getUserUsageCount(
+        coupon.id,
+        identifier
+      );
+      if (usageCount >= coupon.perUserLimit) {
+        return {
+          valid: false,
+          discount: 0,
+          message: "You have already used this coupon",
+        };
+      }
     }
   }
 
   // 6. First Order Only Check
   if (coupon.firstOrderOnly) {
-    if (!userId) {
-      return {
-        valid: false,
-        discount: 0,
-        message: "Please sign in to use this coupon",
-      };
-    }
-    const isFirst = await couponRepository.isFirstOrder(userId);
-    if (!isFirst) {
-      return {
-        valid: false,
-        discount: 0,
-        message: "This coupon is only valid for first-time orders",
-      };
+    const activeUserId = userId && userId !== "guest" ? userId : null;
+    const activePhone = customerInfo?.phone || null;
+    const activeEmail = customerInfo?.email || null;
+
+    if (activeUserId || activePhone || activeEmail) {
+      const isFirst = await couponRepository.isFirstOrder(
+        activeUserId,
+        activeEmail,
+        activePhone
+      );
+      if (!isFirst) {
+        return {
+          valid: false,
+          discount: 0,
+          message: "This coupon is only valid for first-time orders",
+        };
+      }
     }
   }
 
@@ -156,6 +172,8 @@ export const validateCoupon = async (
       };
     }
   }
+
+  const getItemId = (item: CartItem) => item.itemId || item.productId || "";
 
   // 9a. Variant-Level Products Check
   if (
@@ -184,7 +202,7 @@ export const validateCoupon = async (
       coupon.applicableProductVariants.length === 0)
   ) {
     const hasApplicableProduct = cartItems.some((item) =>
-      coupon.applicableProducts!.includes(item.itemId)
+      coupon.applicableProducts!.includes(getItemId(item))
     );
     if (!hasApplicableProduct) {
       return {
@@ -197,7 +215,7 @@ export const validateCoupon = async (
 
   // 10. Applicable Categories Check
   if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
-    const productIds = cartItems.map((item) => item.itemId).filter(Boolean);
+    const productIds = cartItems.map(getItemId).filter(Boolean);
 
     if (productIds.length > 0) {
       const products = await productRepository.findByIds(productIds.slice(0, 10));
@@ -225,7 +243,7 @@ export const validateCoupon = async (
   // 11. Excluded Products Check
   if (coupon.excludedProducts && coupon.excludedProducts.length > 0) {
     const allExcluded = cartItems.every((item) =>
-      coupon.excludedProducts!.includes(item.itemId)
+      coupon.excludedProducts!.includes(getItemId(item))
     );
     if (allExcluded) {
       return {
@@ -261,7 +279,7 @@ export const validateCoupon = async (
       coupon.applicableProducts.length > 0
     ) {
       eligibleItems = cartItems.filter((item) =>
-        coupon.applicableProducts!.includes(item.itemId)
+        coupon.applicableProducts!.includes(getItemId(item))
       );
       applicableTotal = eligibleItems.reduce(
         (sum, item) => sum + item.price * item.quantity,
@@ -271,7 +289,7 @@ export const validateCoupon = async (
 
     if (coupon.excludedProducts && coupon.excludedProducts.length > 0) {
       const excludedTotal = eligibleItems
-        .filter((item) => coupon.excludedProducts!.includes(item.itemId))
+        .filter((item) => coupon.excludedProducts!.includes(getItemId(item)))
         .reduce((sum, item) => sum + item.price * item.quantity, 0);
       applicableTotal = applicableTotal - excludedTotal;
     }

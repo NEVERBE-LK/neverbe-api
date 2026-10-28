@@ -112,15 +112,20 @@ export const addWebOrder = async (order: Partial<Order>) => {
 
     const validation = await validateCoupon(
       order.couponCode,
-      order.customer?.id || "guest",
+      order.userId || order.customer?.id || null,
       cartTotal,
       order.items.map(i => ({
+        itemId: i.itemId,
         productId: i.itemId,
         variantId: i.variantId,
         quantity: i.quantity,
         price: productMap.get(i.itemId)?.sellingPrice || 0,
         discount: i.discount,
       })),
+      {
+        phone: order.customer?.phone,
+        email: order.customer?.email,
+      }
     );
     if (!validation.valid) throw new AppError(`Coupon Invalid: ${validation.message}`, 400);
     finalDiscount = validation.discount || 0;
@@ -230,7 +235,8 @@ export const addWebOrder = async (order: Partial<Order>) => {
 
     // Post-transaction tasks
     if (appliedCouponId) {
-      await trackCouponUsage(appliedCouponId, order.customer?.id || "guest", order.orderId!, finalDiscount);
+      const trackingUser = order.userId || order.customer?.phone || order.customer?.email || order.customer?.id || "guest";
+      await trackCouponUsage(appliedCouponId, trackingUser, order.orderId!, finalDiscount);
     }
     for (const promoId of appliedPromotionIds) {
       await promotionRepository.incrementUsageCount(promoId);

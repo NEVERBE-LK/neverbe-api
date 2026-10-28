@@ -15,7 +15,7 @@ export const POST = async (req: NextRequest) => {
 
     const data = JSON.parse(dataString);
 
-    const { code, cartTotal, cartItems, userId } = data || {};
+    const { code, cartTotal, cartItems, userId, email, phone } = data || {};
 
     if (!code) {
       return NextResponse.json(
@@ -28,7 +28,8 @@ export const POST = async (req: NextRequest) => {
       code,
       userId || null,
       cartTotal || 0,
-      cartItems || []
+      cartItems || [],
+      { email, phone }
     );
 
     return NextResponse.json(result);

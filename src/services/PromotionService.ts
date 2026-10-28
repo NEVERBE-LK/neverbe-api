@@ -50,8 +50,8 @@ export const createPromotion = async (
   const created = await promotionRepository.create({
     ...data,
     bannerUrl,
-    startDate: data.startDate ? new Date(data.startDate as any) : null,
-    endDate: data.endDate ? new Date(data.endDate as any) : null,
+    startDate: data.startDate ? (new Date(data.startDate as any) as any) : null,
+    endDate: data.endDate ? (new Date(data.endDate as any) as any) : null,
     usageCount: 0,
   });
   return formatEntityDates(created, ["startDate", "endDate", "createdAt", "updatedAt"]);
@@ -173,81 +173,39 @@ const getEligibleCartItems = (cartItems: CartItem[], targets: ProductVariantTarg
   });
 };
 
-export const validateCoupon = async (
-  code: string,
-  userId: string | null,
-  cartTotal: number,
-  cartItems: CartItem[],
-) => {
-  const coupon = await getCouponByCode(code);
-  if (!coupon) return { valid: false, discount: 0, message: "Invalid coupon code" };
-  if (!coupon.isActive) return { valid: false, discount: 0, message: "Coupon is not active" };
-
-  const now = new Date();
-  const startDate = new Date(coupon.startDate as string);
-  const endDate = coupon.endDate ? new Date(coupon.endDate as string) : null;
-
-  if (now < startDate) return { valid: false, discount: 0, message: "Coupon not started" };
-  if (endDate && now > endDate) return { valid: false, discount: 0, message: "Coupon expired" };
-  if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) return { valid: false, discount: 0, message: "Usage limit reached" };
-
-  if (userId && coupon.perUserLimit) {
-    const count = await couponRepository.getUserUsageCount(coupon.id, userId);
-    if (count >= coupon.perUserLimit) return { valid: false, discount: 0, message: "Per-user limit reached" };
-  }
-
-  if (coupon.minOrderAmount && cartTotal < coupon.minOrderAmount) return { valid: false, discount: 0, message: "Min order amount required" };
-
-  // Category validation (Batch fetch from productRepository)
-  if (coupon.applicableCategories?.length) {
-    const productIds = cartItems.map(i => i.productId);
-    const products = await productRepository.findByIds(productIds);
-    const hasCat = products.some(p => coupon.applicableCategories!.includes(p.category));
-    if (!hasCat) return { valid: false, discount: 0, message: "Categories not eligible" };
-  }
-
-  // Discount calculation
-  let discountAmount = 0;
-  if (coupon.discountType === "FIXED") {
-    discountAmount = coupon.discountValue;
-  } else if (coupon.discountType === "PERCENTAGE") {
-    let eligibleItems = getEligibleCartItems(cartItems, coupon.applicableProductVariants || []);
-    let applicableTotal = eligibleItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-    discountAmount = (applicableTotal * coupon.discountValue) / 100;
-    if (coupon.maxDiscount && discountAmount > coupon.maxDiscount) discountAmount = coupon.maxDiscount;
-  }
-
-  return { valid: true, discount: discountAmount, coupon };
-};
+// Re-export validateCoupon from WebPromotionService for single unified logic
+export { validateCoupon } from "./WebPromotionService";
 
 export const trackCouponUsage = async (couponId: string, userId: string, orderId: string, discount: number) => {
   await couponRepository.trackUsage(couponId, userId, orderId, discount);
 };
 
-export const calculateCartDiscount = async (cartItems: CartItem[], cartTotal: number, userId?: string | null) => {
+export const calculateCartDiscount = async (cartItems: any[], cartTotal: number, userId?: string | null) => {
   const promotions = await promotionRepository.findActive();
-  promotions.sort((a, b) => b.priority - a.priority);
+  promotions.sort((a, b) => (b.priority || 0) - (a.priority || 0));
 
-  const now = new Date();
   const eligible: { promo: Promotion; discount: number }[] = [];
 
   for (const promo of promotions) {
-    if (userId && promo.perUserLimit) {
+    if (userId && userId !== "guest" && promo.perUserLimit) {
       const count = await promotionRepository.getUserUsageCount(promo.id, userId);
       if (count >= promo.perUserLimit) continue;
     }
 
-    if (!checkVariantEligibility(cartItems, promo.applicableProductVariants || [])) continue;
+    if (!couponRepository.checkVariantEligibility(cartItems, promo.applicableProductVariants || [])) continue;
 
-    // Calculation logic (simplified for refactor)
     let discount = 0;
-    if (promo.type === "PERCENTAGE") {
-      const eligibleItems = getEligibleCartItems(cartItems, promo.applicableProductVariants || []);
+    const action = promo.actions?.[0];
+    const promoValue = action?.value ?? (promo as any).value ?? (promo as any).discountValue ?? 0;
+    const promoMaxDiscount = action?.maxDiscount ?? (promo as any).maxDiscount;
+
+    if (promo.type === "PERCENTAGE" || action?.type === "DISCOUNT_PERCENTAGE") {
+      const eligibleItems = couponRepository.getEligibleCartItems(cartItems, promo.applicableProductVariants || []);
       const total = eligibleItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-      discount = (total * promo.value) / 100;
-      if (promo.maxDiscount && discount > promo.maxDiscount) discount = promo.maxDiscount;
-    } else if (promo.type === "FIXED") {
-      discount = promo.value;
+      discount = (total * promoValue) / 100;
+      if (promoMaxDiscount && discount > promoMaxDiscount) discount = promoMaxDiscount;
+    } else if (promo.type === "FIXED" || action?.type === "DISCOUNT_FIXED") {
+      discount = promoValue;
     }
 
     eligible.push({ promo, discount });
